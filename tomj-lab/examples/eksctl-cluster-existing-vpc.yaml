@@ -1,0 +1,54 @@
+# eksctl: create EKS in an existing VPC (no new VPC / IGW).
+#
+# Fill in vpc.id and at least two subnet IDs in different AZs, then:
+#   eksctl create cluster -f tomj-lab/examples/eksctl-cluster-existing-vpc.yaml
+#
+# Docs: https://eksctl.io/usage/vpc-networking/#use-existing-vpc-any-configuration
+#
+# Typical lab: two *public* subnets (route 0.0.0.0/0 → your existing IGW,
+# default public IP for nodes). Set privateNetworking: false on the node group.
+#
+# Production: private subnets for nodes + NAT in public subnets; set
+# privateNetworking: true and list private subnets under vpc.subnets.private.
+#
+# TROUBLESHOOT — "mismatch between local and remote VPC config" for subnet IDs:
+# Each subnet must sit under the YAML key that matches its REAL AZ (not guessed).
+# Verify with:
+#   aws ec2 describe-subnets --subnet-ids subnet-AAA subnet-BBB --region us-east-2 \
+#     --query 'Subnets[*].[SubnetId,AvailabilityZone,VpcId]' --output table
+# Keys must be exact AZ names (e.g. us-east-2a and us-east-2c — not 2b if the subnet is in 2c).
+# If the two IDs are swapped between lines, swap the lines (common fix).
+
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: tomj-credential-provider-cluster   # or set via env + sed
+  region: us-east-2                        # must match VPC region
+  # version: "1.33"                        # optional: pin Kubernetes version; omit to use eksctl default
+
+vpc:
+  id: vpc-0353f5938a0b92fbb
+  subnets:
+    public:
+      # Two MapPublicIpOnLaunch=true subnets in distinct AZs (192.168.0.0/19 + 192.168.64.0/19)
+      us-east-2a: { id: subnet-044cef4fd6b980696 }
+      us-east-2b: { id: subnet-0cddf732a508702b3 }
+    # private:
+    #   us-east-2a: { id: subnet-private-a }
+    #   us-east-2b: { id: subnet-private-b }
+
+managedNodeGroups:
+  - name: ng-main
+    instanceType: t3.medium
+    desiredCapacity: 2
+    minSize: 1
+    maxSize: 4
+    # Use this when nodes live in *public* subnets (no NAT required):
+    privateNetworking: false
+    # If you only listed private subnets above, use:
+    # privateNetworking: true
+
+# Silence eksctl "Auto Mode will be enabled by default" warning; keep classic managed addons
+autoModeConfig:
+  enabled: false

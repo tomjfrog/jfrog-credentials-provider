@@ -1,0 +1,56 @@
+# Cognito / OIDC path — positive pull test (tomj-lab/aws-lab-exercise.md §9.8).
+#
+# The workload ServiceAccount must NOT have eks.amazonaws.com/role-arn or JFrogExchange;
+# otherwise the provider uses IRSA (GetCallerIdentity) instead of Cognito.
+#
+# Artifactory: same repo as IRSA permission lab (offlimits-docker-local / alpine:3.23). For this
+# *happy* path, grant READ on that repo to ARTIFACTORY_OIDC_USER (e.g. aws-cognito-pull-user) even
+# if aws-eks-pull-user is denied — or the pull will 403. Avoid broad ** / readers if you need a
+# clean deny test for the IRSA user only. Image must match node arch (linux/amd64 on typical EKS x86).
+#
+# Apply (repo root):
+#   kubectl apply -f tomj-lab/examples/k8s/jfrog-artifactory-cognito-deployment.yaml
+#   kubectl -n demo-namespace-cognito rollout status deployment/ubuntu-cognito-pull-ok
+#   kubectl -n demo-namespace-cognito get pods -o wide
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-namespace-cognito
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cognito-plain-sa
+  namespace: demo-namespace-cognito
+  # Intentionally no IRSA / JFrogExchange annotations — Cognito auth path on the node
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ubuntu-cognito-pull-ok
+  namespace: demo-namespace-cognito
+  labels:
+    app: ubuntu-cognito-pull-ok
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ubuntu-cognito-pull-ok
+  template:
+    metadata:
+      labels:
+        app: ubuntu-cognito-pull-ok
+      annotations:
+        jfrog-credential-provider-lab/pull-snapshot: "2026-03-21T12:00:00Z"
+    spec:
+      serviceAccountName: aws-cognito-pull-user
+      nodeSelector:
+        credentialsProviderEnabled: "true"
+      containers:
+        - name: app
+          # TODO: set to a repo your ARTIFACTORY_OIDC_USER can read (linux/amd64 on amd64 nodes)
+          image: tomjfrog.jfrog.io/jfcredsprov-cognito-test-docker-local/nginx:trixie
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-c", "echo OK; sleep infinity"]

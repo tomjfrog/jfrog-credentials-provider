@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::925310216015:oidc-provider/oidc.eks.us-east-2.amazonaws.com/id/612204449164475D66299C21B4A58219"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.eks.us-east-2.amazonaws.com/id/612204449164475D66299C21B4A58219:sub": "system:serviceaccount:demo-namespace:jfrog-pull-sa",
+          "oidc.eks.us-east-2.amazonaws.com/id/612204449164475D66299C21B4A58219:aud": "sts.amazonaws.com"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+# Negative test (permission): same IRSA + Artifactory user aws-eks-pull-user as the happy
+# path; image is in a repo that user must NOT be allowed to read (e.g. offlimits-docker-local).
+#
+# Forcing a real pull after you change Artifactory permissions:
+# - imagePullPolicy: Always (below) so the kubelet re-resolves the image each new Pod.
+# - Bump jfrog-credential-provider-lab/pull-snapshot each time you re-test so the Pod
+#   template changes, Kubernetes rolls new Pods, and pulls run again (not only cached layers).
+#   Example: date -u +%Y-%m-%dT%H:%M:%SZ
+# - Or: kubectl -n demo-namespace rollout restart deployment/ubuntu-artifactory-test-deny-perm
+#
+# Cleanup:
+#   kubectl -n demo-namespace delete -f tomj-lab/examples/k8s/jfrog-artifactory-ubuntu-deployment-negative-permission.yaml
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ubuntu-artifactory-test-deny-perm
+  namespace: demo-namespace
+  labels:
+    app: ubuntu-artifactory-test-deny-perm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ubuntu-artifactory-test-deny-perm
+  template:
+    metadata:
+      labels:
+        app: ubuntu-artifactory-test-deny-perm
+      annotations:
+        jfrog-credential-provider-lab/pull-snapshot: "2026-03-20T22:45:00Z"
+    spec:
+      serviceAccountName: jfrog-pull-sa
+      nodeSelector:
+        credentialsProviderEnabled: "true"
+      containers:
+        - name: alpine
+          image: tomjfrog.jfrog.io/offlimits-docker-local/alpine:3.23
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-c", "echo OK; sleep infinity"]

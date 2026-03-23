@@ -1,0 +1,59 @@
+# Sample app: pull tomjfrog.jfrog.io/... using IRSA + JFrog kubelet credential provider.
+#
+# Prerequisites (tomj-lab/aws-lab-exercise.md):
+# - EKS OIDC associated; IAM role trusted for system:serviceaccount:demo-namespace:jfrog-pull-sa
+# - JFrog PUT /access/api/v1/aws/iam_role for that role ARN
+# - Helm jfrog-credential-provider installed with tokenAttributes + matchImages covering tomjfrog.jfrog.io
+# - Nodes labeled credentialsProviderEnabled=true if your Helm values require it
+#
+# Update eks.amazonaws.com/role-arn below if it does not match your role.
+#
+# If the pod shows CrashLoopBackOff and logs say "exec format error", the image
+# CPU arch does not match the node (e.g. arm64 image on amd64 EKS nodes). Rebuild
+# and push a linux/amd64 (or multi-arch) image to Artifactory, or run on Graviton.
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-namespace
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jfrog-pull-sa
+  namespace: demo-namespace
+  annotations:
+    # IRSA: must match trust policy sub system:serviceaccount:demo-namespace:jfrog-pull-sa
+    eks.amazonaws.com/role-arn: "arn:aws:iam::925310216015:role/jfrog-pull-demo-namespace-jfrog-pull-sa"
+    # JFrog provider: use projected SA token + web identity path (see internal/provider/provider.go)
+    JFrogExchange: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ubuntu-artifactory-test
+  namespace: demo-namespace
+  labels:
+    app: ubuntu-artifactory-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ubuntu-artifactory-test
+  template:
+    metadata:
+      labels:
+        app: ubuntu-artifactory-test
+    spec:
+      # Required: use the annotated SA so the kubelet passes IRSA context to the credential provider
+      serviceAccountName: jfrog-pull-sa
+      # Match Helm node affinity (examples/aws-projected-sa-values.yaml) so the pod lands on a node
+      # where the credential-provider DaemonSet runs. Remove if you removed affinity from Helm.
+      nodeSelector:
+        credentialsProviderEnabled: "true"
+      containers:
+        - name: ubuntu
+          image: tomjfrog.jfrog.io/jfcredsprov-docker-local/ubuntu:resolute
+          imagePullPolicy: Always
+          command: ["/bin/bash", "-c", "echo OK; sleep infinity"]

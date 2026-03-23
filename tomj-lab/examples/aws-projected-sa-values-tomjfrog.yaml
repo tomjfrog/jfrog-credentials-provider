@@ -1,0 +1,40 @@
+# Complete enough to use alone for tomj-lab/aws-lab-exercise.md §6.2 (Helm fills the rest from chart defaults).
+# The kubelet only invokes the JFrog provider when the image matches matchImages.
+#
+#   helm repo add jfrog https://charts.jfrog.io && helm repo update
+#   helm upgrade --install credential-provider jfrog/jfrog-credential-provider \
+#     --namespace jfrog --create-namespace \
+#     -f tomj-lab/examples/aws-projected-sa-values-tomjfrog.yaml
+#
+# You do not need examples/aws-projected-sa-values.yaml if you use only this file.
+# Update aws_role_name if your IRSA role ARN differs.
+
+providerConfig:
+  - name: jfrog-credentials-provider
+    artifactoryUrl: "tomjfrog.jfrog.io"
+    matchImages:
+      - "tomjfrog.jfrog.io"
+      - "*.jfrog.io"
+    defaultCacheDuration: 5h
+    aws:
+      enabled: true
+      aws_auth_method: "assume_role"
+      aws_role_name: "arn:aws:iam::925310216015:role/jfrog-pull-demo-namespace-jfrog-pull-sa"
+      # Must exceed defaultCacheDuration (5h = 18000s); chart default 14400 is too low
+      secret_ttl_seconds: 21600
+    tokenAttributes:
+      enabled: true
+
+rbac:
+  create: true
+
+# Remove this affinity if you do not label nodes credentialsProviderEnabled=true
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: credentialsProviderEnabled
+              operator: In
+              values:
+                - "true"

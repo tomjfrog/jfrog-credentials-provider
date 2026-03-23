@@ -1,0 +1,47 @@
+# JFrog credential provider — AWS auth via Cognito (client_credentials) → Cognito access token
+# → Artifactory /access/api/v1/oidc/token (see internal/handlers/aws.go GetAwsOidcToken).
+#
+# Before Helm: Cognito user pool **with a domain** (code calls DescribeUserPool.Domain; without it,
+# token exchange fails), app client with secret + client_credentials + resource scope, resource
+# server, secret in Secrets Manager as {"client-id":"...","client-secret":"..."}, node IAM allowing
+# GetSecretValue + cognito-idp read APIs — see tomj-lab/aws-lab-exercise.md §9 and AWS.md Option B.
+#
+# IRSA note: if a pod’s ServiceAccount has JFrogExchange + eks.amazonaws.com/role-arn, the
+# provider switches to web_identity (GetCallerIdentity) even when aws_auth_method is cognito_oidc
+# (internal/provider/provider.go). For this lab, use a workload SA **without** those annotations.
+
+providerConfig:
+  - name: jfrog-credentials-provider
+    artifactoryUrl: "tomjfrog.jfrog.io"
+    matchImages:
+      - "tomjfrog.jfrog.io"
+      - "*.jfrog.io"
+    defaultCacheDuration: 5h
+    tokenAttributes:
+      enabled: false
+    aws:
+      enabled: true
+      aws_auth_method: "cognito_oidc"
+      aws_cognito_user_pool_secret_name: "jfrog-cognito-credentials"
+      aws_cognito_user_pool_name: "jfrog-credentials-provider-pool"
+      aws_cognito_resource_server_name: "jfrog-resource-server"
+      aws_cognito_user_pool_resource_scope: "read"
+      jfrog_oidc_provider_name: "aws-cognito-oidc-provider"
+
+rbac:
+  create: false
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+                - amd64
+                - arm64
+            - key: credentialsProviderEnabled
+              operator: In
+              values:
+                - "true"

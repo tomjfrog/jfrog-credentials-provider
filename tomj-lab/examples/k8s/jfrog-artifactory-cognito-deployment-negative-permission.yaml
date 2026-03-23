@@ -1,0 +1,41 @@
+# Cognito / OIDC path — negative test: permission denied (ImagePullBackOff, typically 403).
+#
+# Same identity path as the positive test: same plain SA, same Helm Cognito config.
+# Only the Docker *repository* changes — must be one where ARTIFACTORY_OIDC_USER has NO read.
+#
+# Artifactory: e.g. cognito-offlimits-docker-local with a real tag; exclude ARTIFACTORY_OIDC_USER
+# from permission targets (watch for broad "Anything" / readers group).
+#
+# Bump pull-snapshot or use rollout restart after RBAC changes to force a fresh pull.
+#
+#   kubectl apply -f tomj-lab/examples/k8s/jfrog-artifactory-cognito-deployment-negative-permission.yaml
+#   kubectl -n demo-namespace-cognito describe pod -l app=ubuntu-cognito-pull-deny
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ubuntu-cognito-pull-deny
+  namespace: demo-namespace-cognito
+  labels:
+    app: ubuntu-cognito-pull-deny
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ubuntu-cognito-pull-deny
+  template:
+    metadata:
+      labels:
+        app: ubuntu-cognito-pull-deny
+      annotations:
+        jfrog-credential-provider-lab/pull-snapshot: "2026-03-21T12:00:00Z"
+    spec:
+      serviceAccountName: cognito-plain-sa
+      nodeSelector:
+        credentialsProviderEnabled: "true"
+      containers:
+        - name: alpine
+          image: tomjfrog.jfrog.io/cognito-offlimits-docker-local/alpine:3.20
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-c", "echo OK; sleep infinity"]
