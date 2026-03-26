@@ -16,7 +16,7 @@ Scope: **AKS Workload Identity path only** — not **Option A** (nodepool manage
 
 This is a **logical** model of objects in the Workload Identity path: it emphasizes **alignment** between Entra **federated credentials**, the **AKS OIDC issuer**, **Kubernetes service accounts**, **JFrog OIDC provider + identity mappings**, and the **kubelet credential provider** Helm configuration. It is not a full Azure Resource Manager inventory.
 
-The diagram uses Mermaid’s **`direction TB`** (top-to-bottom) so the layout reads vertically. The **issuer URL** link is `AKS_CLUSTER ||--o{ FEDERATED_IDENTITY_CREDENTIAL` (cluster **one** exposes **many** federated credentials that reference its OIDC issuer).
+The **issuer URL** link is `AKS_CLUSTER ||--o{ FEDERATED_IDENTITY_CREDENTIAL` (one cluster OIDC issuer, many federated credentials that reference it). This diagram does **not** set `direction` (any prior **`direction TB`** was dropped). **Note:** In many renderers—including GitHub’s web UI—the default `erDiagram` layout is already top-to-bottom, so removing `direction TB` often produces **no visible change**. To force a different flow, add e.g. **`direction LR`** on the line after `erDiagram`.
 
 ```mermaid
 erDiagram

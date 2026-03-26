@@ -16,7 +16,7 @@ Scope: **Cognito OIDC path only** — not the IRSA / **`assume_role`** path.
 
 This is a **logical** model of objects in the **Cognito OIDC** path: Amazon **Cognito User Pools** (domain, resource server, app client), **Secrets Manager** credentials, the **EKS worker node IAM role** (IMDS-backed), **JFrog Access** OIDC configuration, and the **kubelet credential provider** Helm release. It is not a full AWS Organizations inventory.
 
-The diagram uses Mermaid’s **`direction TB`** (top-to-bottom). **Dashed** relationships (`..` in the relationship line) mean **operational / policy access** (IAM can read many secrets or call Cognito discovery APIs per your policy shape), not a console “create wizard” parent-child in every case.
+**Dashed** relationships (`..` in the relationship line) mean **operational / policy access** (IAM can read many secrets or call Cognito discovery APIs per your policy shape), not a console “create wizard” parent-child in every case. This diagram does **not** set `direction` (any prior **`direction TB`** was dropped). **Note:** GitHub’s Mermaid preview often keeps a **top-to-bottom** `erDiagram` layout by default, so deleting `direction TB` alone may change nothing; use **`direction LR`** after `erDiagram` if you want a left-to-right layout.
 
 ```mermaid
 erDiagram
