@@ -12,6 +12,115 @@ Scope: **Cognito OIDC path only** — not the IRSA / **`assume_role`** path.
 
 ---
 
+## Object taxonomy (entity–relationship diagram)
+
+This is a **logical** model of objects in the **Cognito OIDC** path: Amazon **Cognito User Pools** (domain, resource server, app client), **Secrets Manager** credentials, the **EKS worker node IAM role** (IMDS-backed), **JFrog Access** OIDC configuration, and the **kubelet credential provider** Helm release. It is not a full AWS Organizations inventory.
+
+The diagram uses Mermaid’s **`direction TB`** (top-to-bottom). **Dashed** relationships (`..` in the relationship line) mean **operational / policy access** (IAM can read many secrets or call Cognito discovery APIs per your policy shape), not a console “create wizard” parent-child in every case.
+
+```mermaid
+erDiagram
+    direction TB
+    COGNITO_USER_POOL {
+        string user_pool_id
+        string pool_name_plugin_lookup
+        string region
+    }
+
+    COGNITO_USER_POOL_DOMAIN {
+        string domain_prefix
+        string auth_endpoint_host
+    }
+
+    COGNITO_RESOURCE_SERVER {
+        string identifier
+        string custom_scope
+    }
+
+    COGNITO_APP_CLIENT {
+        string client_id
+        bool oauth_client_credentials
+    }
+
+    SECRETS_MANAGER_SECRET {
+        string secret_arn
+        string json_field_client_id
+        string json_field_client_secret
+    }
+
+    EKS_NODE_IAM_ROLE {
+        string instance_profile_role_arn
+    }
+
+    K8S_NAMESPACE {
+        string metadata_name
+    }
+
+    K8S_SERVICE_ACCOUNT {
+        string metadata_namespace
+        string metadata_name
+    }
+
+    K8S_WORKLOAD {
+        string workload_kind
+        string image_reference
+    }
+
+    KUBELET_CRED_PROVIDER {
+        string helm_aws_auth_method_cognito_oidc
+        string helm_cognito_pool_name
+        string helm_secrets_manager_secret_ref
+        string helm_jfrog_oidc_provider_name
+    }
+
+    JFROG_OIDC_PROVIDER {
+        string provider_name
+        string issuer_url_cognito_idp
+    }
+
+    JFROG_IDENTITY_MAPPING {
+        string mapping_name
+        string claim_iss
+        string claim_client_id
+    }
+
+    ARTIFACTORY_USER {
+        string username
+    }
+
+    COGNITO_USER_POOL ||--|| COGNITO_USER_POOL_DOMAIN : "hosted domain"
+    COGNITO_USER_POOL ||--o{ COGNITO_RESOURCE_SERVER : "resource server"
+    COGNITO_USER_POOL ||--o{ COGNITO_APP_CLIENT : "app client"
+
+    COGNITO_APP_CLIENT }o--|| COGNITO_RESOURCE_SERVER : "allowed OAuth scopes"
+    COGNITO_APP_CLIENT }o--|| SECRETS_MANAGER_SECRET : "client id and secret"
+
+    EKS_NODE_IAM_ROLE ||..o{ SECRETS_MANAGER_SECRET : "GetSecretValue policy"
+    EKS_NODE_IAM_ROLE ||..o{ COGNITO_USER_POOL : "cognito-idp discovery reads"
+
+    JFROG_OIDC_PROVIDER ||--|| COGNITO_USER_POOL : "issuer from pool id region"
+    JFROG_OIDC_PROVIDER ||--o{ JFROG_IDENTITY_MAPPING : "provider in Access"
+    JFROG_IDENTITY_MAPPING }o--|| COGNITO_APP_CLIENT : "claim client_id aligns"
+    JFROG_IDENTITY_MAPPING }o--|| ARTIFACTORY_USER : "token_spec username"
+
+    K8S_NAMESPACE ||--o{ K8S_SERVICE_ACCOUNT : "contains"
+    K8S_SERVICE_ACCOUNT ||--o{ K8S_WORKLOAD : "serviceAccountName"
+
+    KUBELET_CRED_PROVIDER }o--|| COGNITO_USER_POOL : "pool name in values"
+    KUBELET_CRED_PROVIDER }o--|| SECRETS_MANAGER_SECRET : "secret id or arn"
+    KUBELET_CRED_PROVIDER }o--|| JFROG_OIDC_PROVIDER : "provider name"
+    KUBELET_CRED_PROVIDER }o--|| EKS_NODE_IAM_ROLE : "runs on node with role"
+```
+
+**How to read the diagram**
+
+- **Cognito stack:** One **user pool** has a **domain** (token endpoint), **resource server** (scopes), and **app clients**. The **app client** authorized for **`client_credentials`** holds the **client id**; the **client secret** and id are mirrored in **Secrets Manager** with keys **`client-id`** and **`client-secret`** (exact names).
+- **Node IAM (Cognito-only path):** The **EKS worker / EC2 instance role** uses **IMDS** to call **Secrets Manager** and **Cognito** (`ListUserPools`, `DescribeUserPool`, `ListResourceServers`, etc. per your lab policy)—**not** an IRSA pod role for this design.
+- **JFrog trust:** **JFrog OIDC provider** **`issuer_url`** is `https://cognito-idp.<region>.amazonaws.com/<userPoolId>`. **Identity mappings** typically key on **`iss`** and **`client_id`** (and peers your team chooses); **`expires_in`** should exceed Helm **`defaultCacheDuration`**.
+- **Kubernetes:** **`KUBELET_CRED_PROVIDER`** Helm values must align **pool name**, **secret reference**, resource server / scope, and **`jfrog_oidc_provider_name`** with Cognito + JFrog. For a **pure Cognito** sign-off workload, use a **plain** **`K8S_SERVICE_ACCOUNT`** **without** **`JFrogExchange`** and **without** **`eks.amazonaws.com/role-arn`**, or the provider may take the **IRSA / `GetCallerIdentity`** path instead.
+
+---
+
 ## AWS services and objects (AWS administrators)
 
 

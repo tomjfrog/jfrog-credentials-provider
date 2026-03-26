@@ -12,6 +12,106 @@ Scope: **AKS Workload Identity path only** — not **Option A** (nodepool manage
 
 ---
 
+## Object taxonomy (entity–relationship diagram)
+
+This is a **logical** model of objects in the Workload Identity path: it emphasizes **alignment** between Entra **federated credentials**, the **AKS OIDC issuer**, **Kubernetes service accounts**, **JFrog OIDC provider + identity mappings**, and the **kubelet credential provider** Helm configuration. It is not a full Azure Resource Manager inventory.
+
+The diagram uses Mermaid’s **`direction TB`** (top-to-bottom) so the layout reads vertically. The **issuer URL** link is `AKS_CLUSTER ||--o{ FEDERATED_IDENTITY_CREDENTIAL` (cluster **one** exposes **many** federated credentials that reference its OIDC issuer).
+
+```mermaid
+erDiagram
+    direction TB
+    AKS_CLUSTER {
+        string resource_id
+        string oidc_issuer_url
+        bool workload_identity_enabled
+    }
+
+    FEDERATED_IDENTITY_CREDENTIAL {
+        string credential_name
+        string issuer_equals_cluster_oidc_url
+        string subject_equals_serviceaccount_sub
+        string audience_AzureADTokenExchange
+    }
+
+    ENTRA_APP_REGISTRATION {
+        string application_client_id
+        string object_id
+        int requestedAccessTokenVersion
+    }
+
+    ENTRA_SERVICE_PRINCIPAL {
+        string object_id
+    }
+
+    K8S_NAMESPACE {
+        string metadata_name
+    }
+
+    K8S_SERVICE_ACCOUNT {
+        string metadata_namespace
+        string metadata_name
+        string annot_azure_workload_identity_client_id
+        string annot_JFrogExchange
+    }
+
+    K8S_WORKLOAD {
+        string workload_kind
+        string image_reference
+        string label_azure_workload_identity_use
+    }
+
+    KUBELET_CRED_PROVIDER {
+        string values_azure_app_client_id
+        string values_jfrog_oidc_provider_name
+        bool tokenProjection_enabled
+    }
+
+    JFROG_OIDC_PROVIDER {
+        string provider_name
+        string issuer_url
+        string token_issuer
+    }
+
+    JFROG_IDENTITY_MAPPING {
+        string mapping_name
+        string claim_iss
+        string claim_aud
+        string claim_sub
+        string token_spec_username
+    }
+
+    ARTIFACTORY_USER {
+        string username
+    }
+
+    AKS_CLUSTER ||--o{ FEDERATED_IDENTITY_CREDENTIAL : "issuer URL"
+    ENTRA_APP_REGISTRATION ||--o{ FEDERATED_IDENTITY_CREDENTIAL : "owned by app"
+    ENTRA_APP_REGISTRATION ||--|| ENTRA_SERVICE_PRINCIPAL : "enterprise app SP"
+
+    K8S_NAMESPACE ||--o{ K8S_SERVICE_ACCOUNT : "contains"
+    K8S_SERVICE_ACCOUNT ||--o{ K8S_WORKLOAD : "serviceAccountName"
+
+    K8S_SERVICE_ACCOUNT }o--|| ENTRA_APP_REGISTRATION : "annotation equals client_id"
+    FEDERATED_IDENTITY_CREDENTIAL ||--|| K8S_SERVICE_ACCOUNT : "subject binds one SA"
+
+    JFROG_OIDC_PROVIDER }o--|| AKS_CLUSTER : "issuer matches cluster OIDC"
+    JFROG_OIDC_PROVIDER ||--o{ JFROG_IDENTITY_MAPPING : "namespace in Access"
+    JFROG_IDENTITY_MAPPING }o--|| K8S_SERVICE_ACCOUNT : "sub iss aud match SA JWT"
+    JFROG_IDENTITY_MAPPING }o--|| ARTIFACTORY_USER : "token_spec username"
+
+    KUBELET_CRED_PROVIDER }o--|| ENTRA_APP_REGISTRATION : "config azure_app_client_id"
+    KUBELET_CRED_PROVIDER }o--|| JFROG_OIDC_PROVIDER : "config provider name"
+```
+
+**How to read the diagram**
+
+- **Solid identity spine:** `K8S_SERVICE_ACCOUNT` is annotated with **`application_client_id`** (same value everywhere that references the Entra app). Entra **`FEDERATED_IDENTITY_CREDENTIAL`** uses the cluster **`oidc_issuer_url`** as **issuer** and the SA’s stable **`sub`** (`system:serviceaccount:…`) as **subject**.
+- **JFrog trust:** `JFROG_OIDC_PROVIDER` must use the **same** **`oidc_issuer_url`** as **`iss`** on incoming tokens. **`JFROG_IDENTITY_MAPPING`** narrows which tokens map to which **`ARTIFACTORY_USER`** (typically via **`sub`** and peers).
+- **Runtime:** `KUBELET_CRED_PROVIDER` (chart/DaemonSet + kubelet config) must reference the same Entra app and JFrog provider name as above. Pulling **`K8S_WORKLOAD`** pods need the Workload Identity **label** and the annotated **ServiceAccount**.
+
+---
+
 ## Azure and Entra ID objects (cloud / identity administrators)
 
 | Area | What you need | Notes |
