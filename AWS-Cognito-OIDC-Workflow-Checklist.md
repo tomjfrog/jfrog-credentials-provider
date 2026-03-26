@@ -20,7 +20,6 @@ The diagram uses Mermaid’s **`direction TB`** (top-to-bottom). **Dashed** rela
 
 ```mermaid
 erDiagram
-    direction TB
     COGNITO_USER_POOL {
         string user_pool_id
         string pool_name_plugin_lookup

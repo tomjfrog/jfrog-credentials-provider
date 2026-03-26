@@ -20,7 +20,6 @@ The diagram uses Mermaid’s **`direction TB`** (top-to-bottom) so the layout re
 
 ```mermaid
 erDiagram
-    direction TB
     AKS_CLUSTER {
         string resource_id
         string oidc_issuer_url
