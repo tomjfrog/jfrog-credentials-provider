@@ -91,6 +91,18 @@ type CredentialProviderConfig struct {
 	Providers  []Provider `json:"providers" yaml:"providers"`
 }
 
+type AWSEnvVariables struct {
+	AWSAuthMethod                  string
+	AWSRoleName                    string
+	AWSExternalRoleARN             string
+	AWSExternalRoleDurationSeconds int
+	JFrogOIDCProviderName          string
+	SecretName                     string
+	ResourceServerName             string
+	UserPoolName                   string
+	UserPoolResourceScope          string
+}
+
 func getStructFields(s interface{}) []string {
 	fields := make([]string, 0)
 	t := reflect.TypeOf(s)
@@ -323,8 +335,8 @@ func ValidateJfrogProviderConfig(config Provider, cloudProvider string) error {
 	switch cloudProvider {
 	case CloudProviderAWS:
 		awsAuthMethod := GetEnvVarValue(config.Env, "aws_auth_method")
-		if awsAuthMethod != "cognito_oidc" && awsAuthMethod != "assume_role" {
-			return fmt.Errorf("aws_auth_method can only be set as cognito_oidc or assume_role however the current value is :" + awsAuthMethod)
+		if awsAuthMethod != "cognito_oidc" && awsAuthMethod != "assume_role" && awsAuthMethod != "assume_external_role" {
+			return fmt.Errorf("aws_auth_method can only be set as cognito_oidc, assume_role or assume_external_role however the current value is: %s", awsAuthMethod)
 		}
 
 		if awsAuthMethod == "cognito_oidc" {
@@ -333,10 +345,24 @@ func ValidateJfrogProviderConfig(config Provider, cloudProvider string) error {
 			}
 		}
 
+		if awsAuthMethod == "assume_external_role" && GetEnvVarValue(config.Env, "aws_external_role_arn") == "" {
+			return fmt.Errorf("aws_auth_method as assume_external_role requires aws_external_role_arn to be set")
+		}
+
 	case CloudProviderAzure:
+		azureAuthMethod := GetEnvVarValue(config.Env, "azure_auth_method")
+		if azureAuthMethod != "" && azureAuthMethod != "imds_direct" {
+			return fmt.Errorf("azure_auth_method can only be set as imds_direct however the current value is :%s", azureAuthMethod)
+		}
 		if config.TokenAttributes != nil && slices.Contains(config.TokenAttributes.RequiredServiceAccountAnnotationKeys, "JFrogExchange") {
-			if GetEnvVarValue(config.Env, "azure_app_client_id") == "" || GetEnvVarValue(config.Env, "azure_app_audience") == "" || GetEnvVarValue(config.Env, "jfrog_oidc_provider_name") == "" {
-				return fmt.Errorf("ERROR in JFrog Credentials provider, environment variables missing: azure_app_client_id, azure_app_audience, jfrog_oidc_provider_name")
+			if GetEnvVarValue(config.Env, "azure_app_audience") == "" || GetEnvVarValue(config.Env, "jfrog_oidc_provider_name") == "" {
+				return fmt.Errorf("ERROR in JFrog Credentials provider, environment variables missing: azure_app_audience, jfrog_oidc_provider_name")
+			}
+		} else if azureAuthMethod == "imds_direct" {
+			// IMDS direct flow: fetches an app-scoped access token from IMDS using the
+			// app client id; no Azure AD impersonation, so no tenant id or audience.
+			if GetEnvVarValue(config.Env, "azure_app_client_id") == "" || GetEnvVarValue(config.Env, "azure_nodepool_client_id") == "" || GetEnvVarValue(config.Env, "jfrog_oidc_provider_name") == "" {
+				return fmt.Errorf("ERROR in JFrog Credentials provider, environment variables missing: azure_app_client_id, azure_nodepool_client_id, jfrog_oidc_provider_name")
 			}
 		} else if GetEnvVarValue(config.Env, "azure_app_client_id") == "" || GetEnvVarValue(config.Env, "azure_tenant_id") == "" || GetEnvVarValue(config.Env, "azure_app_audience") == "" || GetEnvVarValue(config.Env, "azure_nodepool_client_id") == "" || GetEnvVarValue(config.Env, "jfrog_oidc_provider_name") == "" {
 			return fmt.Errorf("ERROR in JFrog Credentials provider, environment variables missing: azure_app_client_id, azure_tenant_id, azure_app_audience, azure_nodepool_client_id, jfrog_oidc_provider_name")

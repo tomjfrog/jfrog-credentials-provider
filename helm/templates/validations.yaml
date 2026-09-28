@@ -58,3 +58,80 @@
   {{- end }}
 {{- end }}
 
+{{/* platform is optional; when set, only openshift is valid */}}
+{{- if and .Values.platform (ne .Values.platform "openshift") }}
+{{- fail (printf "\nERROR: Invalid platform %q. Omit platform for EKS, AKS, and GKE, or set platform: openshift for OpenShift (see OpenShift.md)." .Values.platform) }}
+{{- end }}
+{{- if eq (include "jfrog-credential-provider.isOpenShift" .) "true" }}
+{{- if ne (include "jfrog-credential-provider.isOpenShiftStaging" .) "true" }}
+{{- fail "\nERROR: platform: openshift requires providerConfig[].aws.enabled or providerConfig[].azure.enabled. OpenShift on Google Cloud is not supported in this chart version. See OpenShift.md." }}
+{{- end }}
+{{- range .Values.providerConfig }}
+{{- if and .aws .aws.enabled }}
+{{- if not (and .tokenAttributes .tokenAttributes.enabled .tokenAttributes.requireServiceAccount) }}
+{{- fail (printf "\nERROR: platform: openshift with AWS requires providerConfig[%q].tokenAttributes.enabled: true and requireServiceAccount: true (IRSA only; aws_role_name fallback is not supported). See OpenShift.md." .name) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/* Validate logLevel is a supported value */}}
+{{- $logLevel := upper .Values.logLevel }}
+{{- if and (ne $logLevel "INFO") (ne $logLevel "DEBUG") }}
+{{- fail (printf "\nERROR: Invalid logLevel %q. Supported values are \"INFO\" or \"DEBUG\"." .Values.logLevel) }}
+{{- end }}
+
+{{/* autoUpgrade is incompatible with a pre-baked binary or authenticated download */}}
+{{- if .Values.autoUpgrade }}
+  {{- $authUsed := or .Values.binaryDownload.auth.existingSecret .Values.binaryDownload.auth.username .Values.binaryDownload.auth.accessToken }}
+  {{- if or .Values.internalBinaryHostPath $authUsed }}
+    {{- $errorMsg := "\nERROR: autoUpgrade cannot be enabled when internalBinaryHostPath or binaryDownload.auth is used.\n" }}
+    {{- if .Values.internalBinaryHostPath }}
+      {{- $errorMsg = printf "%s  - internalBinaryHostPath is set (binary is provided on the node; there is nothing to auto-upgrade).\n" $errorMsg }}
+    {{- end }}
+    {{- if $authUsed }}
+      {{- $errorMsg = printf "%s  - binaryDownload.auth is configured.\n" $errorMsg }}
+    {{- end }}
+    {{- $errorMsg = printf "%s\nSet autoUpgrade=false (the default) to proceed.\n" $errorMsg }}
+    {{- fail $errorMsg }}
+  {{- end }}
+{{- end }}
+
+{{/* When aws_auth_method == "assume_external_role", aws_external_role_arn must be set */}}
+{{- range .Values.providerConfig }}
+  {{- if and .aws .aws.enabled (eq (.aws.aws_auth_method | default "") "assume_external_role") }}
+    {{- if not .aws.aws_external_role_arn }}
+      {{- $errorMsg := printf "\nERROR: providerConfig '%s' has aws.aws_auth_method=\"assume_external_role\" but aws.aws_external_role_arn is empty.\n" .name }}
+      {{- $errorMsg = printf "%sSet aws.aws_external_role_arn to the ARN of the role to assume across accounts.\n" $errorMsg }}
+      {{- fail $errorMsg }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{/* Validate azure.azure_auth_method and its required fields */}}
+{{- range .Values.providerConfig }}
+  {{- if and .azure .azure.enabled }}
+    {{- $azureAuthMethod := .azure.azure_auth_method | default "" }}
+    {{- if and (ne $azureAuthMethod "") (ne $azureAuthMethod "imds_direct") }}
+      {{- $errorMsg := printf "\nERROR: providerConfig '%s' has an invalid azure.azure_auth_method %q.\n" .name $azureAuthMethod }}
+      {{- $errorMsg = printf "%sSupported values are \"\" (legacy federated / projected) or \"imds_direct\".\n" $errorMsg }}
+      {{- fail $errorMsg }}
+    {{- end }}
+    {{/* imds_direct is a node-identity flow and is mutually exclusive with projected tokens (tokenAttributes) */}}
+    {{- if and (eq $azureAuthMethod "imds_direct") (and .tokenAttributes .tokenAttributes.enabled) }}
+      {{- $errorMsg := printf "\nERROR: providerConfig '%s' sets azure.azure_auth_method=\"imds_direct\" together with tokenAttributes.enabled=true.\n" .name }}
+      {{- $errorMsg = printf "%sThese are mutually exclusive: imds_direct uses the node managed identity, while tokenAttributes uses projected service account tokens.\n" $errorMsg }}
+      {{- $errorMsg = printf "%sUse imds_direct without tokenAttributes, or remove azure_auth_method to use the projected token flow.\n" $errorMsg }}
+      {{- fail $errorMsg }}
+    {{- end }}
+    {{/* imds_direct is a node-identity flow; only validate when not using projected tokens */}}
+    {{- if and (eq $azureAuthMethod "imds_direct") (not (and .tokenAttributes .tokenAttributes.enabled)) }}
+      {{- if or (not .azure.azure_app_client_id) (not .azure.azure_nodepool_client_id) (not .azure.jfrog_oidc_provider_name) }}
+        {{- $errorMsg := printf "\nERROR: providerConfig '%s' has azure.azure_auth_method=\"imds_direct\" but is missing required fields.\n" .name }}
+        {{- $errorMsg = printf "%sRequired: azure_app_client_id, azure_nodepool_client_id, jfrog_oidc_provider_name.\n" $errorMsg }}
+        {{- fail $errorMsg }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+

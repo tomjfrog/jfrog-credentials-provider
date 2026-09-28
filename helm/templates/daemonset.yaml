@@ -6,6 +6,10 @@ metadata:
   labels:
     {{- include "jfrog-credential-provider.labels" . | nindent 4 }}
 spec:
+  {{- with .Values.updateStrategy }}
+  updateStrategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "jfrog-credential-provider.selectorLabels" . | nindent 6 }}
@@ -41,6 +45,31 @@ spec:
           env:
             - name: JFROG_CREDENTIAL_PROVIDER_BINARY_URL
               value: {{ .Values.downloadUrl | quote }}
+            {{- if .Values.internalBinaryHostPath }}
+            - name: LOCAL_BINARY_HOST_PATH
+              value: {{ .Values.internalBinaryHostPath | quote }}
+            {{- end }}
+            {{- $authSecret := .Values.binaryDownload.auth.existingSecret | default (printf "%s-download-auth" (include "jfrog-credential-provider.fullname" .)) }}
+            {{- if or .Values.binaryDownload.auth.existingSecret .Values.binaryDownload.auth.username .Values.binaryDownload.auth.accessToken }}
+            - name: DOWNLOAD_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $authSecret }}
+                  key: username
+                  optional: true
+            - name: DOWNLOAD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $authSecret }}
+                  key: password
+                  optional: true
+            - name: DOWNLOAD_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $authSecret }}
+                  key: accessToken
+                  optional: true
+            {{- end }}
           command:
             - /bin/bash
             - -c
@@ -49,7 +78,9 @@ spec:
             privileged: true
           volumeMounts:
           {{- $cloudProvider := include "jfrog-credential-provider.cloudProvider" . }}
-            {{- if or (eq $cloudProvider "aws") (eq $cloudProvider "gcp") }}
+          {{- $kubeletYaml := eq (include "jfrog-credential-provider.kubeletConfigYaml" .) "true" }}
+          {{- $useHostMount := eq (include "jfrog-credential-provider.useHostMount" .) "true" }}
+            {{- if $useHostMount }}
             - mountPath: /host
               name: host
             {{- else if (eq $cloudProvider "azure") }}
@@ -59,7 +90,11 @@ spec:
             - mountPath: /bin/setup.sh
               subPath: setup.sh
               name: {{ include "jfrog-credential-provider.fullname" . }}-setup
-            {{- if eq $cloudProvider "aws" }}
+            {{- if $kubeletYaml }}
+            - mountPath: /etc/jfrog-provider.yaml
+              subPath: jfrog-provider.yaml
+              name: {{ include "jfrog-credential-provider.fullname" . }}-config
+            {{- else if eq $cloudProvider "aws" }}
             - mountPath: /etc/jfrog-provider.json
               subPath: jfrog-provider.json
               name: {{ include "jfrog-credential-provider.fullname" . }}-config
@@ -67,6 +102,11 @@ spec:
             - mountPath: /etc/jfrog-provider.yaml
               subPath: jfrog-provider.yaml
               name: {{ include "jfrog-credential-provider.fullname" . }}-config
+            {{- end }}
+            {{- if .Values.internalBinaryHostPath }}
+            - name: local-binary
+              mountPath: /local-binary/{{ base .Values.internalBinaryHostPath }}
+              readOnly: true
             {{- end }}
             {{- if .Values.customVolumeMounts }}
             {{- .Values.customVolumeMounts | nindent 12 }}
@@ -76,9 +116,19 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       containers:
-        - name: jfrog-credential-provider-injector-pause
+        - name: jfrog-credentials-provider-main
+        {{- if .Values.containerLogging.enabled }}
+          image: {{ include "jfrog-credential-provider.initContainerImage" . }}
+          imagePullPolicy: {{ .Values.initContainer.image.pullPolicy }}
+          command: ["sh", "-c", "tail -F /var/log/jfrog-credentials-provider/jfrog-credentials-provider.log"]
+          volumeMounts:
+            - name: jfrog-log-dir
+              mountPath: /var/log/jfrog-credentials-provider
+              readOnly: true
+        {{- else }}
           image: {{ include "jfrog-credential-provider.pauseImage" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- end }}
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -90,18 +140,16 @@ spec:
         {{- end }}
       {{- end }}
       volumes:
-        {{- if or (eq $cloudProvider "aws") (eq $cloudProvider "gcp") }}
+        {{- if $useHostMount }}
         - name: host
           hostPath:
             path: /
             type: Directory
-        {{- else }}
-        {{- if eq $cloudProvider "azure" }}
+        {{- else if eq $cloudProvider "azure" }}
         - name: kubelet
           hostPath:
             path: /var/lib/kubelet
             type: Directory
-          {{- end }}
         {{- end }}
         - name: {{ include "jfrog-credential-provider.fullname" . }}-setup
           configMap:
@@ -109,6 +157,18 @@ spec:
         - name: {{ include "jfrog-credential-provider.fullname" . }}-config
           configMap:
             name: {{ include "jfrog-credential-provider.fullname" . }}-config
+        {{- if .Values.containerLogging.enabled }}
+        - name: jfrog-log-dir
+          hostPath:
+            path: /var/log/jfrog-credentials-provider
+            type: DirectoryOrCreate
+        {{- end }}
+        {{- if .Values.internalBinaryHostPath }}
+        - name: local-binary
+          hostPath:
+            path: {{ .Values.internalBinaryHostPath }}
+            type: File
+        {{- end }}
         {{- if .Values.customVolumes }}
         {{- .Values.customVolumes | nindent 8 }}
         {{- end }}
