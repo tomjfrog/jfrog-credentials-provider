@@ -1,3 +1,4 @@
+# AWS-only (EKS; not Azure WI)
 # eksctl: create EKS in an existing VPC (no new VPC / IGW).
 #
 # Fill in vpc.id and at least two subnet IDs in different AZs, then:

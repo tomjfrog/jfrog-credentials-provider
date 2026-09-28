@@ -1,3 +1,4 @@
+# AWS-only (EKS Cognito path; not Azure WI)
 # JFrog credential provider — AWS auth via Cognito (client_credentials) → Cognito access token
 # → Artifactory /access/api/v1/oidc/token (see internal/handlers/aws.go GetAwsOidcToken).
 #

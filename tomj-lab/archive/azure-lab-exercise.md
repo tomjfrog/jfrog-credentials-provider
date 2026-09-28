@@ -1,5 +1,9 @@
 # Lab exercise: JFrog Kubelet Credential Provider on AKS (Azure Workload Identity only)
 
+> **Superseded (2026-09):** Use [azure-wi-isolation-lab.md](./azure-wi-isolation-lab.md) for **1.4.0 Option B** (no Entra app). This file documents the **pre-1.4.0** Entra federated-credential model and is kept for history only.
+
+---
+
 This runbook uses **Option B — projected service account tokens + Azure Workload Identity** ([AZURE.md](../AZURE.md) Step 3B). It does **not** use Terraform or nodepool/IMDS identity (Option A).
 
 **Why this path:** The token sent to JFrog is the **Kubernetes service account OIDC JWT** from your cluster issuer. Its `sub` claim is stable and workload-specific: `system:serviceaccount:<namespace>:<service-account>`. You can give each team, namespace, or app a dedicated ServiceAccount, a matching **Entra federated credential**, and a **JFrog identity mapping** on `sub` (and tighter claims if your JFrog version supports them)—so Artifactory sees identity that reflects **which Kubernetes workload** is pulling the image.

@@ -1,3 +1,4 @@
+# AWS-only (EKS IRSA; not Azure WI)
 # Complete enough to use alone for tomj-lab/aws-lab-exercise.md §6.2 (Helm fills the rest from chart defaults).
 # The kubelet only invokes the JFrog provider when the image matches matchImages.
 #

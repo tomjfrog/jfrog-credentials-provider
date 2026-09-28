@@ -1,0 +1,17 @@
+# T1: team-a SA pulls team-a image (positive)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pull-team-a-own
+  namespace: team-a
+  annotations:
+    jfrog-credential-provider-lab/pull-snapshot: "2026-09-28T1"
+spec:
+  serviceAccountName: artifactory-pull
+  # nodeName: aks-nodepool-0000000  # set for T6 same-node tests
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: tomjpd2.jfrog.io/team-a-docker-local/alpine:wi-lab-amd64
+      imagePullPolicy: Always
+      command: ["sleep", "3600"]

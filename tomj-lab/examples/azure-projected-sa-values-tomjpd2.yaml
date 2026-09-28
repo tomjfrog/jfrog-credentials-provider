@@ -1,0 +1,30 @@
+# Fallback: default audience api://AzureADTokenExchange; requires legacy-aud OIDC mappings.
+# Canonical lab values: azure-projected-sa-values-tomjpd2-jfrog-audience.yaml
+providerConfig:
+  - name: jfrog-credentials-provider
+    artifactoryUrl: tomjpd2.jfrog.io
+    matchImages:
+      - "tomjpd2.jfrog.io"
+    defaultCacheDuration: 5m
+    tokenAttributes:
+      enabled: true
+    azure:
+      enabled: true
+      azure_app_audience: "api://AzureADTokenExchange"
+      jfrog_oidc_provider_name: aks-wi-lab-oidc
+
+rbac:
+  create: true
+
+logLevel: debug
+
+# Remove this block or label nodes: kubectl label nodes --all credentialsProviderEnabled=true
+# affinity:
+#   nodeAffinity:
+#     requiredDuringSchedulingIgnoredDuringExecution:
+#       nodeSelectorTerms:
+#         - matchExpressions:
+#             - key: credentialsProviderEnabled
+#               operator: In
+#               values:
+#                 - "true"

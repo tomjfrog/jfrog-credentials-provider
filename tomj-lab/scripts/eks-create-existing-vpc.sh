@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# AWS-only (EKS; not Azure WI)
 # Create EKS in the VPC defined in tomj-lab/examples/eksctl-cluster-existing-vpc.yaml, then
 # associate the OIDC provider (required for IRSA / JFrog kubelet credential provider).
 #

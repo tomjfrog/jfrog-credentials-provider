@@ -1,3 +1,4 @@
+# AWS-only (EKS Cognito; not Azure WI)
 # Cognito / OIDC path — negative test: permission denied (ImagePullBackOff, typically 403).
 #
 # Same identity path as the positive test: same plain SA, same Helm Cognito config.

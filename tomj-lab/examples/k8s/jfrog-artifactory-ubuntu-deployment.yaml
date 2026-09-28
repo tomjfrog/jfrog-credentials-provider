@@ -1,3 +1,4 @@
+# AWS-only (EKS IRSA; not Azure WI)
 # Sample app: pull tomjfrog.jfrog.io/... using IRSA + JFrog kubelet credential provider.
 #
 # Prerequisites (tomj-lab/aws-lab-exercise.md):

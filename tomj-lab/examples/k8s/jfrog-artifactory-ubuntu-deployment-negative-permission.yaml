@@ -1,3 +1,4 @@
+# AWS-only (EKS IRSA; not Azure WI)
 # Negative test (permission): same IRSA + Artifactory user aws-eks-pull-user as the happy
 # path; image is in a repo that user must NOT be allowed to read (e.g. offlimits-docker-local).
 #

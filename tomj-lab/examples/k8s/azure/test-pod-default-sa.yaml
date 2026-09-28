@@ -1,0 +1,16 @@
+# T4: default SA in team-a (no JFrogExchange)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pull-default-sa
+  namespace: team-a
+  annotations:
+    jfrog-credential-provider-lab/pull-snapshot: "2026-09-28T1"
+spec:
+  serviceAccountName: default
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: tomjpd2.jfrog.io/team-a-docker-local/alpine:wi-lab-amd64
+      imagePullPolicy: Always
+      command: ["sleep", "3600"]

@@ -1,0 +1,16 @@
+# T2: team-a SA pulls team-b image (negative — expect ImagePullBackOff / 403)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pull-team-a-cross
+  namespace: team-a
+  annotations:
+    jfrog-credential-provider-lab/pull-snapshot: "2026-09-28T1"
+spec:
+  serviceAccountName: artifactory-pull
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: tomjpd2.jfrog.io/team-b-docker-local/alpine:wi-lab-amd64
+      imagePullPolicy: Always
+      command: ["sleep", "3600"]

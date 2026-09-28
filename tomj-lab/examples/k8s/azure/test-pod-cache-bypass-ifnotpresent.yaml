@@ -1,0 +1,17 @@
+# T7: run AFTER team-a pulled on same node — IfNotPresent may use node cache (expected gap)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pull-cache-bypass-ifnotpresent
+  namespace: team-b
+  annotations:
+    jfrog-credential-provider-lab/pull-snapshot: "2026-09-28T7"
+spec:
+  serviceAccountName: artifactory-pull
+  # nodeName: <same-as-team-a-positive>
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: tomjpd2.jfrog.io/team-a-docker-local/alpine:wi-lab-amd64
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "3600"]

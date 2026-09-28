@@ -1,0 +1,16 @@
+# T5: mapped SA in unmapped namespace team-c
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pull-team-c-unmapped
+  namespace: team-c
+  annotations:
+    jfrog-credential-provider-lab/pull-snapshot: "2026-09-28T1"
+spec:
+  serviceAccountName: artifactory-pull
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: tomjpd2.jfrog.io/team-a-docker-local/alpine:wi-lab-amd64
+      imagePullPolicy: Always
+      command: ["sleep", "3600"]

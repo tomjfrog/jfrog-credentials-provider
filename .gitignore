@@ -2,3 +2,4 @@
 **/*command-outputs.txt
 !aws-env-secrets.sh.example
 !azure-env-secrets.sh.example
+*.code-workspace

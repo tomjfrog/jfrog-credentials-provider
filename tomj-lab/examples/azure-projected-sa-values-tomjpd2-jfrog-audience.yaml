@@ -1,0 +1,18 @@
+# Same as tomjpd2 values but dedicated projected-token audience (T8)
+providerConfig:
+  - name: jfrog-credentials-provider
+    artifactoryUrl: tomjpd2.jfrog.io
+    matchImages:
+      - "tomjpd2.jfrog.io"
+    defaultCacheDuration: 5m
+    tokenAttributes:
+      enabled: true
+    azure:
+      enabled: true
+      azure_app_audience: "jfrog-artifactory"
+      jfrog_oidc_provider_name: aks-wi-lab-oidc
+
+rbac:
+  create: true
+
+logLevel: debug

@@ -1,6 +1,8 @@
 # Lab exercise: JFrog Kubelet Credential Provider on AWS EKS (IRSA + projected SA tokens)
 
-This runbook mirrors [azure-lab-exercise.md](./azure-lab-exercise.md) (AKS) but uses **Amazon EKS** and **IAM Roles for Service Accounts (IRSA)** with **projected service account tokens** (KEP 4412), as described in [AWS.md](../AWS.md) (Option A, Sub-Option A2).
+**AWS-only (EKS / IRSA / Cognito)** — not the Azure Workload Identity isolation demo. For Azure Option B (1.4.0), see [azure-wi-isolation-lab.md](./azure-wi-isolation-lab.md).
+
+This runbook parallels the Azure isolation lab on AKS but uses **Amazon EKS** and **IAM Roles for Service Accounts (IRSA)** with **projected service account tokens** (KEP 4412), as described in [AWS.md](../AWS.md) (Option A, Sub-Option A2).
 
 **Not Terraform:** Steps use **AWS CLI**, **kubectl**, and **Helm** only. You can swap in CloudFormation/CDK/Terraform later if you prefer.
 
@@ -20,9 +22,9 @@ That file can set **`AWS_PROFILE`** for **IAM Identity Center (SSO)** so every c
 
 ## Azure vs AWS (mental model)
 
-| Topic | Azure (your Workload Identity lab) | AWS (this lab) |
+| Topic | Azure (Option B isolation lab) | AWS (this lab) |
 |--------|-------------------------------------|----------------|
-| Workload identity | Entra app + federated credential + K8s SA JWT → JFrog OIDC exchange | IRSA: K8s SA → `AssumeRoleWithWebIdentity` → AWS creds → **signed `GetCallerIdentity`** → JFrog **AWS IAM** endpoint |
+| Workload identity | Projected K8s SA JWT (cluster OIDC issuer) → **direct** JFrog OIDC exchange — **no Entra** | IRSA: K8s SA → `AssumeRoleWithWebIdentity` → AWS creds → **signed `GetCallerIdentity`** → JFrog **AWS IAM** endpoint |
 | JFrog config | OIDC provider + identity mappings on JWT `iss` / `aud` / `sub` | **REST:** `PUT .../access/api/v1/aws/iam_role` maps **`iam_role` ARN** → Artifactory **user** |
 | Per-workload isolation | Different `sub` + mappings | Different **IAM role ARN** per ServiceAccount + **one binding per ARN** |
 | Helm values | [examples/azure-projected-sa-values.yaml](../examples/azure-projected-sa-values.yaml) | [examples/aws-projected-sa-values.yaml](../examples/aws-projected-sa-values.yaml) |
@@ -734,7 +736,7 @@ helm upgrade --install credential-provider jfrog/jfrog-credential-provider \
 
 **Logs:** `/var/log/jfrog-credential-provider.log` ([debug.md](../debug.md)).
 
-**Mental model:** **Kubernetes SA JWT to JFrog OIDC** is the **Azure** story ([azure-lab-exercise.md](./azure-lab-exercise.md)). **Cognito** here is **node to Secrets Manager to Cognito `client_credentials` to JFrog OIDC**.
+**Mental model:** **Kubernetes SA JWT to JFrog OIDC** is the **Azure Option B** story ([azure-wi-isolation-lab.md](./azure-wi-isolation-lab.md)). **Cognito** here is **node to Secrets Manager to Cognito `client_credentials` to JFrog OIDC**.
 
 ### 9.8 Test cases (positive + negative)
 

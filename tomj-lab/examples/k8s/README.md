@@ -1,4 +1,6 @@
-# Sample workload: pull from Artifactory with the kubelet credential provider
+# Sample workload: pull from Artifactory with the kubelet credential provider (AWS-only, EKS)
+
+For **Azure Workload Identity isolation** test pods, see [azure/README.md](./azure/README.md) and [azure-wi-isolation-lab.md](../../azure-wi-isolation-lab.md).
 
 The JFrog **kubelet credential provider** runs on **each node** (DaemonSet from Helm). It does not ship application Deployments: **you** create Pods/Deployments that:
 

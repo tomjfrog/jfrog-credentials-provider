@@ -1,0 +1,388 @@
+❯ # Get your Azure cloud name from the active cloud eg. AzureCloud, AzureChinaCloud
+CLOUD_NAME=$(az cloud show --query name -o tsv)
+
+# Set the endpoints from the table above based on your CLOUD_NAME
+GRAPH_ENDPOINT="https://graph.microsoft.com"
+AD_ENDPOINT="https://login.microsoftonline.com"
+
+echo "Azure Cloud Name: $CLOUD_NAME"
+echo "Microsoft Graph Endpoint: $GRAPH_ENDPOINT"
+echo "Active Directory Endpoint: $AD_ENDPOINT"
+Azure Cloud Name: AzureCloud
+Microsoft Graph Endpoint: https://graph.microsoft.com
+Active Directory Endpoint: https://login.microsoftonline.com
+
+jfrog-credentials-provider on  main [!] via 🐹 v1.26.2 took 4s 
+❯ # Set variables
+APP_DISPLAY_NAME="jfrog-credentials-provider-aks"
+TENANT_ID=$(az account show --query tenantId -o tsv)
+
+# Create the application
+APP_CLIENT_ID=$(az ad app create \
+  --display-name "$APP_DISPLAY_NAME" \
+  --query appId -o tsv)
+
+echo "Application Client ID: $APP_CLIENT_ID"
+echo "Tenant ID: $TENANT_ID"
+ERROR: Continuous access evaluation resulted in challenge with result: InteractionRequired and code: LocationConditionEvaluationSatisfied
+Application Client ID: 
+Tenant ID: ad8b5a8c-9862-4c41-a341-aa838fc564df
+
+jfrog-credentials-provider on  main [!] via 🐹 v1.26.2 took 5s 
+❯ az login
+A web browser has been opened at https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize. Please continue the login in the web browser. If no web browser is available or if the web browser fails to open, use device code flow with `az login --use-device-code`.
+
+Retrieving tenants and subscriptions for the selection...
+
+[Tenant and subscription selection]
+
+No     Subscription name         Subscription ID                       Tenant
+-----  ------------------------  ------------------------------------  ----------------
+[1] *  DevOps-Acceleration-team  1615f76b-5de0-4194-927e-53958b9da148  JFrog Production
+
+The default is marked with an *; the default tenant is 'JFrog Production' and subscription is 'DevOps-Acceleration-team' (1615f76b-5de0-4194-927e-53958b9da148).
+
+Select a subscription and tenant (Type a number or Enter for no changes): 1
+
+Tenant: JFrog Production
+Subscription: DevOps-Acceleration-team (1615f76b-5de0-4194-927e-53958b9da148)
+
+[Announcements]
+With the new Azure CLI login experience, you can select the subscription you want to use more easily. Learn more about it and its configuration at https://go.microsoft.com/fwlink/?linkid=2271236
+
+If you encounter any problem, please open an issue at https://aka.ms/azclibug
+
+[Warning] The login output has been updated. Please be aware that it no longer displays the full list of available subscriptions by default.
+
+
+jfrog-credentials-provider on  main [!] via 🐹 v1.26.2 took 22s 
+❯ # Set variables
+APP_DISPLAY_NAME="jfrog-credentials-provider-aks"
+TENANT_ID=$(az account show --query tenantId -o tsv)
+
+# Create the application
+APP_CLIENT_ID=$(az ad app create \
+  --display-name "$APP_DISPLAY_NAME" \
+  --query appId -o tsv)
+
+echo "Application Client ID: $APP_CLIENT_ID"
+echo "Tenant ID: $TENANT_ID"
+ERROR: Continuous access evaluation resulted in challenge with result: InteractionRequired and code: LocationConditionEvaluationSatisfied
+Application Client ID: 
+Tenant ID: ad8b5a8c-9862-4c41-a341-aa838fc564df
+
+jfrog-credentials-provider on  main [!] via 🐹 v1.26.2 
+❯ # Set variables
+RESOURCE_GROUP="tomj-jfrog-credentials-provider-lab-rg"
+CLUSTER_NAME="tomj-k8s-cluster"
+
+# Enable OIDC Issuer
+az aks update \                       
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$CLUSTER_NAME" \
+  --enable-oidc-issuer
+
+# Retrieve the OIDC Issuer URL (Save this for Artifactory config)
+SERVICE_ACCOUNT_ISSUER=$(az aks show \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$CLUSTER_NAME" \               
+  --query "oidcIssuerProfile.issuerUrl" \
+  -o tsv)
+                                                                                                             
+echo "Service Account Issuer: $SERVICE_ACCOUNT_ISSUER"
+/opt/homebrew/Cellar/azure-cli/2.85.0/libexec/lib/python3.13/site-packages/azure/mgmt/containerservice/models/_models.py:7481: SyntaxWarning: invalid escape sequence '\W'
+  Has a digit <br> Has a special character (Regex match [\W_]) <br><br> **Disallowed values:**
+^R[C - Starting ..
+{
+  "aadProfile": null,
+  "addonProfiles": {
+    "azureKeyvaultSecretsProvider": {
+      "config": null,
+      "enabled": false,
+      "identity": null
+    },
+    "azurepolicy": {
+      "config": null,
+      "enabled": false,
+      "identity": null
+    }
+  },
+  "agentPoolProfiles": [
+    {
+      "availabilityZones": [
+        "1"
+      ],
+      "capacityReservationGroupId": null,
+      "count": 2,
+      "creationData": null,
+      "currentOrchestratorVersion": "1.34.4",
+      "eTag": "6e68ad1d-0e6f-4ce4-bb7f-52391727cf9c",
+      "enableAutoScaling": true,
+      "enableEncryptionAtHost": null,
+      "enableFips": false,
+      "enableNodePublicIp": false,
+      "enableUltraSsd": null,
+      "gatewayProfile": null,
+      "gpuInstanceProfile": null,
+      "gpuProfile": null,
+      "hostGroupId": null,
+      "kubeletConfig": null,
+      "kubeletDiskType": "OS",
+      "linuxOsConfig": null,
+      "localDnsProfile": null,
+      "maxCount": 5,
+      "maxPods": 110,
+      "messageOfTheDay": null,
+      "minCount": 2,
+      "mode": "System",
+      "name": "agentpool",
+      "networkProfile": null,
+      "nodeImageVersion": "AKSUbuntu-2204gen2containerd-202604.13.0",
+      "nodeLabels": null,
+      "nodePublicIpPrefixId": null,
+      "nodeTaints": null,
+      "orchestratorVersion": "1.34.4",
+      "osDiskSizeGb": 128,
+      "osDiskType": "Managed",
+      "osSku": "Ubuntu",
+      "osType": "Linux",
+      "podIpAllocationMode": null,
+      "podSubnetId": null,
+      "powerState": {
+        "code": "Running"
+      },
+      "provisioningState": "Succeeded",
+      "proximityPlacementGroupId": null,
+      "scaleDownMode": "Delete",
+      "scaleSetEvictionPolicy": null,
+      "scaleSetPriority": null,
+      "securityProfile": {
+        "enableSecureBoot": false,
+        "enableVtpm": false,
+        "sshAccess": null
+      },
+      "spotMaxPrice": null,
+      "status": null,
+      "tags": null,
+      "type": "VirtualMachineScaleSets",
+      "upgradeSettings": {
+        "drainTimeoutInMinutes": null,
+        "maxSurge": "10%",
+        "maxUnavailable": "0",
+        "nodeSoakDurationInMinutes": null,
+        "undrainableNodeBehavior": null
+      },
+      "virtualMachineNodesStatus": null,
+      "virtualMachinesProfile": null,
+      "vmSize": "Standard_D4as_v5",
+      "vnetSubnetId": null,
+      "windowsProfile": null,
+      "workloadRuntime": null
+    }
+  ],
+  "aiToolchainOperatorProfile": null,
+  "apiServerAccessProfile": {
+    "authorizedIpRanges": null,
+    "disableRunCommand": null,
+    "enablePrivateCluster": false,
+    "enablePrivateClusterPublicFqdn": null,
+    "enableVnetIntegration": null,
+    "privateDnsZone": null,
+    "subnetId": null
+  },
+  "autoScalerProfile": {
+    "balanceSimilarNodeGroups": "false",
+    "daemonsetEvictionForEmptyNodes": false,
+    "daemonsetEvictionForOccupiedNodes": true,
+    "expander": "random",
+    "ignoreDaemonsetsUtilization": false,
+    "maxEmptyBulkDelete": "10",
+    "maxGracefulTerminationSec": "600",
+    "maxNodeProvisionTime": "15m",
+    "maxTotalUnreadyPercentage": "45",
+    "newPodScaleUpDelay": "0s",
+    "okTotalUnreadyCount": "3",
+    "scaleDownDelayAfterAdd": "10m",
+    "scaleDownDelayAfterDelete": "10s",
+    "scaleDownDelayAfterFailure": "3m",
+    "scaleDownUnneededTime": "10m",
+    "scaleDownUnreadyTime": "20m",
+    "scaleDownUtilizationThreshold": "0.5",
+    "scanInterval": "10s",
+    "skipNodesWithLocalStorage": "false",
+    "skipNodesWithSystemPods": "true"
+  },
+  "autoUpgradeProfile": {
+    "nodeOsUpgradeChannel": "NodeImage",
+    "upgradeChannel": "rapid"
+  },
+  "azureMonitorProfile": null,
+  "azurePortalFqdn": "tomj-k8s-cluster-dns-xix8ntfx.portal.hcp.centralus.azmk8s.io",
+  "bootstrapProfile": {
+    "artifactSource": "Direct",
+    "containerRegistryId": null
+  },
+  "currentKubernetesVersion": "1.34.4",
+  "disableLocalAccounts": false,
+  "diskEncryptionSetId": null,
+  "dnsPrefix": "tomj-k8s-cluster-dns",
+  "eTag": "d5a597ac-df6c-4038-84b6-4903f47de102",
+  "enableRbac": true,
+  "extendedLocation": null,
+  "fqdn": "tomj-k8s-cluster-dns-xix8ntfx.hcp.centralus.azmk8s.io",
+  "fqdnSubdomain": null,
+  "httpProxyConfig": null,
+  "id": "/subscriptions/1615f76b-5de0-4194-927e-53958b9da148/resourcegroups/tomj-jfrog-credentials-provider-lab-rg/providers/Microsoft.ContainerService/managedClusters/tomj-k8s-cluster",
+  "identity": {
+    "delegatedResources": null,
+    "principalId": "1ddc8921-1f0c-4794-a1dc-54241f0c0425",
+    "tenantId": "ad8b5a8c-9862-4c41-a341-aa838fc564df",
+    "type": "SystemAssigned",
+    "userAssignedIdentities": null
+  },
+  "identityProfile": {
+    "kubeletidentity": {
+      "clientId": "ba89e48f-9c60-4973-a7e4-0796bb620e2f",
+      "objectId": "4a6c8608-87c6-4dc0-a184-319ff9563544",
+      "resourceId": "/subscriptions/1615f76b-5de0-4194-927e-53958b9da148/resourcegroups/MC_tomj-jfrog-credentials-provider-lab-rg_tomj-k8s-cluster_eastus/providers/Microsoft.ManagedIdentity/userAssignedIdentities/tomj-k8s-cluster-agentpool"
+    }
+  },
+  "ingressProfile": null,
+  "kind": "Base",
+  "kubernetesVersion": "1.34.4",
+  "linuxProfile": null,
+  "location": "centralus",
+  "maxAgentPools": 100,
+  "metricsProfile": {
+    "costAnalysis": {
+      "enabled": false
+    }
+  },
+  "name": "tomj-k8s-cluster",
+  "networkProfile": {
+    "advancedNetworking": {
+      "enabled": false,
+      "observability": {
+        "enabled": false
+      },
+      "performance": {
+        "accelerationMode": "None"
+      },
+      "security": {
+        "advancedNetworkPolicies": "None",
+        "enabled": false,
+        "transitEncryption": null
+      }
+    },
+    "dnsServiceIp": "10.0.0.10",
+    "ipFamilies": [
+      "IPv4"
+    ],
+    "loadBalancerProfile": {
+      "allocatedOutboundPorts": null,
+      "backendPoolType": "nodeIPConfiguration",
+      "effectiveOutboundIPs": [
+        {
+          "id": "/subscriptions/1615f76b-5de0-4194-927e-53958b9da148/resourceGroups/MC_tomj-jfrog-credentials-provider-lab-rg_tomj-k8s-cluster_eastus/providers/Microsoft.Network/publicIPAddresses/2eeeae65-3fed-4f32-8c1c-59f5925605dc",
+          "resourceGroup": "MC_tomj-jfrog-credentials-provider-lab-rg_tomj-k8s-cluster_eastus"
+        }
+      ],
+      "enableMultipleStandardLoadBalancers": null,
+      "idleTimeoutInMinutes": null,
+      "managedOutboundIPs": {
+        "count": 1,
+        "countIpv6": null
+      },
+      "outboundIPs": null,
+      "outboundIpPrefixes": null
+    },
+    "loadBalancerSku": "standard",
+    "natGatewayProfile": null,
+    "networkDataplane": "azure",
+    "networkMode": null,
+    "networkPlugin": "azure",
+    "networkPluginMode": "overlay",
+    "networkPolicy": "none",
+    "outboundType": "loadBalancer",
+    "podCidr": "10.244.0.0/16",
+    "podCidrs": [
+      "10.244.0.0/16"
+    ],
+    "serviceCidr": "10.0.0.0/16",
+    "serviceCidrs": [
+      "10.0.0.0/16"
+    ],
+    "staticEgressGatewayProfile": null
+  },
+  "nodeProvisioningProfile": {
+    "defaultNodePools": "Auto",
+    "mode": "Manual"
+  },
+  "nodeResourceGroup": "MC_tomj-jfrog-credentials-provider-lab-rg_tomj-k8s-cluster_eastus",
+  "nodeResourceGroupProfile": null,
+  "oidcIssuerProfile": {
+    "enabled": true,
+    "issuerUrl": "https://centralus.oic.prod-aks.azure.com/ad8b5a8c-9862-4c41-a341-aa838fc564df/16d7b4c6-03c2-40d9-a137-354bd22d8bb6/"
+  },
+  "podIdentityProfile": null,
+  "powerState": {
+    "code": "Running"
+  },
+  "privateFqdn": null,
+  "privateLinkResources": null,
+  "provisioningState": "Succeeded",
+  "publicNetworkAccess": null,
+  "resourceGroup": "tomj-jfrog-credentials-provider-lab-rg",
+  "resourceUid": "69f216d8dc2fe40001eed977",
+  "securityProfile": {
+    "azureKeyVaultKms": null,
+    "customCaTrustCertificates": null,
+    "defender": null,
+    "imageCleaner": {
+      "enabled": true,
+      "intervalHours": 168
+    },
+    "workloadIdentity": {
+      "enabled": true
+    }
+  },
+  "serviceMeshProfile": null,
+  "servicePrincipalProfile": {
+    "clientId": "msi",
+    "secret": null
+  },
+  "sku": {
+    "name": "Base",
+    "tier": "Free"
+  },
+  "status": null,
+  "storageProfile": {
+    "blobCsiDriver": null,
+    "diskCsiDriver": {
+      "enabled": true
+    },
+    "fileCsiDriver": {
+      "enabled": true
+    },
+    "snapshotController": {
+      "enabled": true
+    }
+  },
+  "supportPlan": "KubernetesOfficial",
+  "systemData": null,
+  "tags": null,
+  "type": "Microsoft.ContainerService/ManagedClusters",
+  "upgradeSettings": null,
+  "windowsProfile": {
+    "adminPassword": null,
+    "adminUsername": "azureuser",
+    "enableCsiProxy": true,
+    "gmsaProfile": null,
+    "licenseType": null
+  },
+  "workloadAutoScalerProfile": {
+    "keda": null,
+    "verticalPodAutoscaler": null
+  }
+}
+Service Account Issuer: https://centralus.oic.prod-aks.azure.com/ad8b5a8c-9862-4c41-a341-aa838fc564df/16d7b4c6-03c2-40d9-a137-354bd22d8bb6/

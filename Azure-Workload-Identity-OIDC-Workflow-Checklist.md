@@ -1,208 +1,107 @@
-# Azure Workload Identity OIDC workflow — stakeholder checklist
+# Azure Workload Identity OIDC workflow — stakeholder checklist (1.4.0 Option B)
 
-This document summarizes **Microsoft Entra ID (Azure AD)**, **AKS Workload Identity**, **JFrog Access** configuration, and **Kubernetes** concerns for the JFrog Kubelet Credential Provider when using **projected service account tokens** exchanged via **Azure Workload Identity**, then OIDC token exchange with Artifactory.
+**Updated for JFrog credential provider 1.4.0:** projected Kubernetes service account tokens go **directly** to Artifactory. **No** Entra app registration, **no** federated credentials, **no** `azure.workload.identity/client-id` annotation.
 
-It is derived from:
+Lab runbook: [tomj-lab/azure-wi-isolation-lab.md](./tomj-lab/azure-wi-isolation-lab.md). Evidence: [tomj-lab/azure-wi-isolation-evidence.md](./tomj-lab/azure-wi-isolation-evidence.md).
 
-- [`AZURE.md`](./AZURE.md) (Option B: Workload Identity / Step 3B)
-- [`tomj-lab/azure-lab-exercise.md`](./tomj-lab/azure-lab-exercise.md)
-- [`examples/azure-projected-sa-values.yaml`](./examples/azure-projected-sa-values.yaml)
-
-Scope: **AKS Workload Identity path only** — not **Option A** (nodepool managed identity + Azure IMDS + federated credential whose issuer is `https://login.microsoftonline.com/...`).
+Legacy Entra-centric checklist content referred to pre-1.4.0 behavior; see git history before upstream merge.
 
 ---
 
-## Object taxonomy (entity–relationship diagram)
-
-This is a **logical** model of objects in the Workload Identity path: it emphasizes **alignment** between Entra **federated credentials**, the **AKS OIDC issuer**, **Kubernetes service accounts**, **JFrog OIDC provider + identity mappings**, and the **kubelet credential provider** Helm configuration. It is not a full Azure Resource Manager inventory.
-
-The **issuer URL** link is `AKS_CLUSTER ||--o{ FEDERATED_IDENTITY_CREDENTIAL` (one cluster OIDC issuer, many federated credentials that reference it). This diagram does **not** set `direction` (any prior **`direction TB`** was dropped). **Note:** In many renderers—including GitHub’s web UI—the default `erDiagram` layout is already top-to-bottom, so removing `direction TB` often produces **no visible change**. To force a different flow, add e.g. **`direction LR`** on the line after `erDiagram`.
+## Object taxonomy (simplified)
 
 ```mermaid
 erDiagram
     AKS_CLUSTER {
-        string resource_id
         string oidc_issuer_url
         bool workload_identity_enabled
     }
-
-    FEDERATED_IDENTITY_CREDENTIAL {
-        string credential_name
-        string issuer_equals_cluster_oidc_url
-        string subject_equals_serviceaccount_sub
-        string audience_AzureADTokenExchange
-    }
-
-    ENTRA_APP_REGISTRATION {
-        string application_client_id
-        string object_id
-        int requestedAccessTokenVersion
-    }
-
-    ENTRA_SERVICE_PRINCIPAL {
-        string object_id
-    }
-
     K8S_NAMESPACE {
-        string metadata_name
+        string name
     }
-
     K8S_SERVICE_ACCOUNT {
-        string metadata_namespace
-        string metadata_name
-        string annot_azure_workload_identity_client_id
         string annot_JFrogExchange
     }
-
-    K8S_WORKLOAD {
-        string workload_kind
-        string image_reference
-        string label_azure_workload_identity_use
-    }
-
     KUBELET_CRED_PROVIDER {
-        string values_azure_app_client_id
-        string values_jfrog_oidc_provider_name
         bool tokenProjection_enabled
+        string jfrog_oidc_provider_name
     }
-
     JFROG_OIDC_PROVIDER {
-        string provider_name
         string issuer_url
-        string token_issuer
     }
-
     JFROG_IDENTITY_MAPPING {
-        string mapping_name
         string claim_iss
-        string claim_aud
         string claim_sub
-        string token_spec_username
+        string claim_aud
     }
-
     ARTIFACTORY_USER {
         string username
     }
-
-    AKS_CLUSTER ||--o{ FEDERATED_IDENTITY_CREDENTIAL : "issuer URL"
-    ENTRA_APP_REGISTRATION ||--o{ FEDERATED_IDENTITY_CREDENTIAL : "owned by app"
-    ENTRA_APP_REGISTRATION ||--|| ENTRA_SERVICE_PRINCIPAL : "enterprise app SP"
-
-    K8S_NAMESPACE ||--o{ K8S_SERVICE_ACCOUNT : "contains"
-    K8S_SERVICE_ACCOUNT ||--o{ K8S_WORKLOAD : "serviceAccountName"
-
-    K8S_SERVICE_ACCOUNT }o--|| ENTRA_APP_REGISTRATION : "annotation equals client_id"
-    FEDERATED_IDENTITY_CREDENTIAL ||--|| K8S_SERVICE_ACCOUNT : "subject binds one SA"
-
-    JFROG_OIDC_PROVIDER }o--|| AKS_CLUSTER : "issuer matches cluster OIDC"
-    JFROG_OIDC_PROVIDER ||--o{ JFROG_IDENTITY_MAPPING : "namespace in Access"
-    JFROG_IDENTITY_MAPPING }o--|| K8S_SERVICE_ACCOUNT : "sub iss aud match SA JWT"
-    JFROG_IDENTITY_MAPPING }o--|| ARTIFACTORY_USER : "token_spec username"
-
-    KUBELET_CRED_PROVIDER }o--|| ENTRA_APP_REGISTRATION : "config azure_app_client_id"
-    KUBELET_CRED_PROVIDER }o--|| JFROG_OIDC_PROVIDER : "config provider name"
+    AKS_CLUSTER ||--o{ K8S_NAMESPACE : hosts
+    K8S_NAMESPACE ||--o{ K8S_SERVICE_ACCOUNT : contains
+    JFROG_OIDC_PROVIDER }o--|| AKS_CLUSTER : issuer
+    JFROG_OIDC_PROVIDER ||--o{ JFROG_IDENTITY_MAPPING : maps
+    JFROG_IDENTITY_MAPPING }o--|| K8S_SERVICE_ACCOUNT : sub
+    JFROG_IDENTITY_MAPPING }o--|| ARTIFACTORY_USER : token_spec
+    KUBELET_CRED_PROVIDER }o--|| JFROG_OIDC_PROVIDER : name
+    K8S_SERVICE_ACCOUNT ||--o{ KUBELET_CRED_PROVIDER : JFrogExchange
 ```
 
-**How to read the diagram**
+---
 
-- **Solid identity spine:** `K8S_SERVICE_ACCOUNT` is annotated with **`application_client_id`** (same value everywhere that references the Entra app). Entra **`FEDERATED_IDENTITY_CREDENTIAL`** uses the cluster **`oidc_issuer_url`** as **issuer** and the SA’s stable **`sub`** (`system:serviceaccount:…`) as **subject**.
-- **JFrog trust:** `JFROG_OIDC_PROVIDER` must use the **same** **`oidc_issuer_url`** as **`iss`** on incoming tokens. **`JFROG_IDENTITY_MAPPING`** narrows which tokens map to which **`ARTIFACTORY_USER`** (typically via **`sub`** and peers).
-- **Runtime:** `KUBELET_CRED_PROVIDER` (chart/DaemonSet + kubelet config) must reference the same Entra app and JFrog provider name as above. Pulling **`K8S_WORKLOAD`** pods need the Workload Identity **label** and the annotated **ServiceAccount**.
+## Azure / platform administrators
+
+| Area | Requirement |
+|------|-------------|
+| AKS | `--enable-oidc-issuer` (and historically WI flag; 1.4.0 path does not use Entra WI exchange for pulls) |
+| Issuer URL | Record `oidcIssuerProfile.issuerUrl` exactly (trailing slash) for JFrog `iss` |
+| Egress | Nodes reach `tomjpd2.jfrog.io` (or customer Artifactory) and cluster OIDC discovery |
+| Entra | **Not required** for Option B 1.4.0 |
+
+## JFrog administrators
+
+| Object | Requirement |
+|--------|-------------|
+| OIDC provider | `issuer_url` / `token_issuer` = AKS OIDC issuer |
+| Identity mapping | Match `iss`, `sub` (`system:serviceaccount:<ns>:<sa>`), `aud` (recommended: **`jfrog-artifactory`**, aligned with Helm `azure_app_audience`) |
+| Artifactory user | Per team/namespace; repo permissions **without** global `readers` if testing isolation |
+| Token TTL | `expires_in` > provider `defaultCacheDuration` |
+
+## Kubernetes administrators
+
+| Object | Requirement |
+|--------|-------------|
+| Helm chart | `jfrog/jfrog-credential-provider` ≥ 1.4.0, `tokenAttributes.enabled: true` |
+| ServiceAccount | `JFrogExchange: "true"` on pulling workloads |
+| Pods | `serviceAccountName` set; `imagePullPolicy: Always` for isolation tests on shared nodes |
+| Provider | DaemonSet on all pulling nodes; verify merged kubelet credential provider YAML |
 
 ---
 
-## Azure and Entra ID objects (cloud / identity administrators)
+## Discovery questions (customer workshop)
 
-| Area | What you need | Notes |
-| ---- | ------------- | ----- |
-| **Microsoft Entra ID — App registration** | **Application (client) ID**, optionally **object ID** for Graph updates | Same app can serve many workloads via **multiple** federated credentials. Follow [`AZURE.md`](./AZURE.md) Step 1 for creation, service principal, **`requestedAccessTokenVersion: 2`**, and (recommended) **Assignment required** + app role + self-assignment. |
-| | **Federated identity credentials (Workload Identity)** | **One credential per** pulling `ServiceAccount`: **`issuer`** = AKS **OIDC issuer URL** (from `oidcIssuerProfile`), **`subject`** = `system:serviceaccount:<namespace>:<name>`, **`audiences`** = `["api://AzureADTokenExchange"]`. **Do not** rely on Option A’s federated credential (`issuer` = `login.microsoftonline.com/...`, kubelet/nodepool subject) for this flow—that trusts **IMDS-issued** tokens, not the **Kubernetes service account JWT** sent to JFrog. |
-| **Microsoft Entra ID — Enterprise application** | Alignment with **Assignment required** and assignments | If the enterprise app requires assignment, the app’s own service principal must still be able to obtain tokens as documented in [`AZURE.md`](./AZURE.md). |
-| **AKS cluster** | **OIDC issuer enabled** and **Workload Identity enabled** | `az aks create` / `az aks update` with `--enable-oidc-issuer` and `--enable-workload-identity`. Retrieve **`oidcIssuerProfile.issuerUrl`** (or ARM `issuerURL`); this string must match the service account JWT **`iss`** exactly (including a **trailing slash** if returned that way). |
-| **Networking** | **Egress from nodes** | Nodes must reach **`https://<artifactory-host>`**, Entra token endpoints as used by the exchange, and Azure management/APIs your baseline requires. Private clusters need NAT, proxy, or approved private endpoints per org standards. |
+### Azure / AKS
 
-**Not used** on the Helm **projected-token** path (compare Option A): **`azure_nodepool_client_id`**, and **nodepool user-assigned identity** for the **kubelet → IMDS** assertion that Option A exchanges with Entra.
+1. AKS version and support for kubelet credential provider + projected SA tokens?
+2. Shared nodepools across tenants or dedicated nodepools?
+3. Egress to Artifactory and to AKS OIDC issuer from nodes?
 
----
+### Kubernetes
 
-## JFrog / platform objects
+1. Admission policy for `imagePullPolicy: Always` on tenant workloads?
+2. RBAC model: who can create pods / tokens in each namespace?
+3. GitOps approval for Helm DaemonSet on nodes?
 
-Often owned separately from the Azure team.
+### JFrog
 
-| Object | Purpose |
-| ------ | ------- |
-| **Access API: OIDC provider** | `POST .../access/api/v1/oidc` with **`issuer_url` / `token_issuer`** = **AKS OIDC issuer** (not `https://login.microsoftonline.com/<tenant>/v2.0`). **`provider_type`**: `Azure` per examples. Workload Identity samples often omit **`azure_app_id`** / audience fields on the provider compared to Option A—follow your Artifactory version’s API contract. |
-| **Access API: identity mapping** | Maps JWT claims (**`iss`**, **`aud`**, **`sub`**) to an **Artifactory username** and token settings. For Workload Identity: **`aud`**: `api://AzureADTokenExchange`, **`iss`**: AKS issuer URL, **`sub`**: `system:serviceaccount:<namespace>:<service-account>`. **`expires_in`** should exceed Helm **`defaultCacheDuration`** (see [`AZURE.md`](./AZURE.md) warning for Option A; same idea applies here). |
-| **Artifactory user** | Dedicated user(s) per mapping tier; Docker **read** (and other repo permissions) for target repositories. |
-| **Admin access token** | To run Access API configuration. |
+1. Accept cluster OIDC issuer as provider (Azure vs Generic type)?
+2. Identity mapping: exact `sub` only vs namespace wildcard — what does your Access version support?
+3. Default `readers` group membership for new users?
 
 ---
 
-## Kubernetes / cluster objects (platform / Kubernetes administrators)
+## Viability (honest)
 
-| Object / concern | What you need |
-| ---------------- | ------------- |
-| **AKS + supported Kubernetes** | Cluster with **OIDC issuer** and **Workload Identity** wired (mutating webhook projects tokens for labeled pods). |
-| **Per-pulling workload: ServiceAccount** | Annotations: **`azure.workload.identity/client-id`** = app registration **client ID**, **`JFrogExchange`** = **`true`** (required for the provider to use the projected token path for Azure). |
-| **Per-pulling workload: Pod template** | **`spec.serviceAccountName`** set to that SA (not `default` unless intentionally annotated). Label **`azure.workload.identity/use: "true"`** so the Workload Identity webhook projects the token. Apply **namespace-level** labels if your AKS version / Microsoft guidance requires them. |
-| **Entra federated credentials** | One **federated credential** subject per **(namespace, ServiceAccount)** that pulls through this flow; keep subjects in sync when you rename namespaces or service accounts. |
-| **Helm release** | e.g. `jfrog/jfrog-credential-provider` with **`tokenAttributes.enabled: true`**, **`azure_app_client_id`**, **`azure_app_audience`** (typically `api://AzureADTokenExchange`), **`jfrog_oidc_provider_name`** aligned with JFrog. **omit** **`azure_nodepool_client_id`** for this path ([`examples/azure-projected-sa-values.yaml`](./examples/azure-projected-sa-values.yaml)). |
-| **Chart-installed pieces** | DaemonSet, host integration, kubelet credential provider registration—per chart defaults ([`AZURE.md`](./AZURE.md) Step 4). |
-| **Scheduling (if using sample values)** | Example values may use **`credentialsProviderEnabled=true`** node affinity—label nodes or adjust values. |
-| **Network policies / firewalls** | Ensure controls do not block kubelet/registry behavior needed for image pulls and provider operation. |
-
-**Interaction note (Azure vs AWS):** On AWS, **`JFrogExchange` + `eks.amazonaws.com/role-arn`** forces the **IRSA / `GetCallerIdentity`** path. On Azure, **`JFrogExchange` + `azure.workload.identity/client-id`** is the **intended** path for Workload Identity—there is no separate “override” to Option A on the same annotations; Option A is selected by **not** using projected tokens (`tokenAttributes.enabled: false` and nodepool client ID) and **not** annotating the workload SA for exchange.
-
----
-
-## Viability summary (for stakeholders)
-
-- **Azure footprint:** One (or more) app registration(s), **`requestedAccessTokenVersion: 2`**, **federated credentials** whose **issuer** is the **cluster OIDC URL** (not the v1 Entra login issuer used in Option A’s federated cred), AKS with **OIDC + Workload Identity**, and normal egress. **No** dependency on **IMDS** for the pulling identity in this design.
-- **Operational coupling:** Adding a new pulling **ServiceAccount** requires a new **federated credential** subject and usually a new **JFrog identity mapping** (or broader claim rules if policy allows). Cluster issuer URL changes (rare) require updating Entra, JFrog `iss`, and mappings.
-- **Kubernetes coupling:** Every pod that pulls from Artifactory under `matchImages` must use the **annotated ServiceAccount** and **Workload Identity** labels; **default** ServiceAccount without annotations will not drive the projected-token path. The **credential provider** must run on nodes that handle those pulls, with compatible **kubelet** configuration.
-
----
-
-## Discovery questions for Azure, Kubernetes, and JFrog teams
-
-Use these in workshops or email to surface blockers early. “Viable” here means: AKS exposes a stable **OIDC issuer**, Entra accepts **federated workload identity** exchanges for your app registration, workloads receive **projected tokens** with the expected **`iss` / `aud` / `sub`**, Artifactory accepts that issuer and claims, and clusters allow the **JFrog credential provider** installation pattern.
-
-### Questions for the Azure / Entra ID team
-
-1. **App registrations** — Can we register (or reuse) an application for **federated workload credentials** from AKS? Any naming, tagging, or approval process for **machine-oriented** apps?
-2. **Federated credentials** — Are we allowed to create **many** federated credentials on one app (one per Kubernetes `ServiceAccount` subject)? Any limits or automation (IaC, landing zones) we must use?
-3. **Issuer URL** — Will security accept **`issuer`** = **AKS-managed OIDC issuer URL** (per subscription/cluster), and do we have a process to **record** that URL for **dr** Entra/JFrog alignment?
-4. **Token version** — Is **`requestedAccessTokenVersion: 2`** and use of **`login.microsoftonline.com`-style validation** downstream (as in [`AZURE.md`](./AZURE.md)) consistent with tenant policy?
-5. **Assignment required** — If **Assignment required** is mandatory on enterprise apps, can we follow the **self-assignment** pattern in [`AZURE.md`](./AZURE.md) so the federated exchange still works?
-6. **Conditional Access / session policies** — Do any policies block **client credential–style flows** or **federated token exchange** for this app that would break kubelet-time pulls?
-7. **Privileged roles** — Who can run **`az ad app federated-credential create`** (or Graph equivalents) in production, and is there a **change ticket** requirement per subject?
-8. **Multi-tenant / B2B** — If Artifactory or AKS boundaries span tenants, is **cross-tenant** federated trust explicitly designed (usually out of scope for a single-tenant lab)?
-9. **Networking** — For **private** AKS API or locked-down egress, can nodes and control plane components still complete whatever **Entra** endpoints the provider and AKS runtime need, plus **HTTPS to Artifactory**?
-10. **Auditing** — What **Entra sign-in / audit** expectations apply to **token issuance** driven by this app and workload identities?
-
-### Questions for the Kubernetes / platform engineering team
-
-1. **Kubelet credential provider** — Does our **AKS version** and **kubelet configuration** support the **kubelet credential provider** mechanism used by **`jfrog/jfrog-credential-provider`**? Who approves **kubelet** config or node image changes?
-2. **Workload Identity** — Is **`--enable-workload-identity`** (and **OIDC issuer**) approved for production clusters? Any **version skew** or **addon** requirements (e.g. webhook) we must track during upgrades?
-3. **Chart install model** — Can we install the chart via **Helm** (or **GitOps**) in a nominated namespace? Any restriction on **DaemonSets**, **hostPath**, or **privileged** patterns the chart uses?
-4. **Mutations and policy** — Do **OPA / Kyverno / PSA** policies allow **`azure.workload.identity/use`** labels, projected volumes, or webhook-injected volumes? Can we enforce that **pulling pods** use the correct **ServiceAccount**?
-5. **Identity lifecycle** — What is the process when a **namespace** or **ServiceAccount** is renamed—**Entra** federated subjects and **JFrog** mappings must update together?
-6. **Scheduling** — Must the provider run on **all** image-pulling nodes, or only a **labeled** subset? How does that interact with **Spot**, **ARM**, and **taints**?
-7. **Default ServiceAccount pitfall** — Can we **lint** or **gate** Deployments that pull from Artifactory so they do **not** rely on **`default`** SA without **`JFrogExchange`**?
-8. **Private / mirrored registries** — If we use **mirrors** or **pull-through caches**, do **`matchImages`** patterns still invoke the credential provider as expected?
-9. **Observability** — Can operators access **node-level provider logs** (e.g. `/var/log/jfrog-credential-provider.log`) and **kubelet events** for **ImagePullBackOff** triage?
-10. **Change windows** — What is the process to roll **DaemonSet** or **kubelet** changes affecting **every** node, and what **rollback** is required?
-
-### Questions for the JFrog / identity team (if separate from Azure/K8s)
-
-1. Can we register an OIDC provider whose **`issuer_url` / `token_issuer`** is the **AKS OIDC issuer** (cluster-specific), with **`provider_type: Azure`** as in the examples?
-2. Can we add **identity mappings** that pin **`sub`** to `system:serviceaccount:<namespace>:<service-account>` (and **`iss`** / **`aud`** as above), optionally one **Artifactory user** per workload tier?
-3. Can **`token_spec.expires_in`** be set **longer** than the credential provider’s **cache duration** so clients are not handed near-expired registry tokens?
-4. If we need **one JFrog OIDC provider per cluster** (different **`iss`**), is that acceptable operationally, or do we prefer **broader** claim rules—what does our **Artifactory version** support?
-
-### Follow-up: what “yes” looks like
-
-- **Azure / Entra:** App registration with **v2 access tokens**, **federated credentials** for each pulling **`ServiceAccount`** (**issuer** = cluster OIDC URL, **subject** = `system:serviceaccount:...`), **Assignment** model resolved if required.
-- **AKS:** **OIDC issuer** and **Workload Identity** enabled; issuer URL **verified**; workloads use **annotated** ServiceAccounts and **`azure.workload.identity/use`** on pods (and namespace labels if required).
-- **Kubernetes:** **JFrog credential provider** installed with **`tokenAttributes.enabled: true`** and **no** nodepool client ID; pilot **pulls** succeed for a representative workload.
-- **JFrog:** **OIDC provider + mappings** live; test user(s) can **read** pilot repositories; **`expires_in`** vs cache documented.
+- **Promising:** 1.4.0 removes Entra scaling limits; workload identity in JFrog is **`sub`-driven**.
+- **Unproven until tested:** Same-node cross-namespace pull denial (T6), node image cache (T7), mapping wildcards.
+- **Not a plugin feature:** Node-level cache and cluster RBAC boundaries.

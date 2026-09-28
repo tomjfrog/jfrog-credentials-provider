@@ -1,3 +1,4 @@
+# AWS-only (EKS Cognito; not Azure WI)
 # Cognito / OIDC path — positive pull test (tomj-lab/aws-lab-exercise.md §9.8).
 #
 # The workload ServiceAccount must NOT have eks.amazonaws.com/role-arn or JFrogExchange;
