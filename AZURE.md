@@ -14,7 +14,7 @@ There are **three** ways to set this up (see [Setup Process](#-setup-process) fo
 - **Option B — Workload Identity (projected SA tokens):** ⭐ **No Azure AD app registration at all** — the simplest and most scalable option; Artifactory trusts the cluster's OIDC issuer and the workload's Kubernetes Service Account directly.
 - **Option C — IMDS Direct:** Azure AD app registration but **no federated credential** (uses an app-role assignment instead), to avoid Azure's federated-credential limit.
 
-> The diagram and "How It Works" below describe **Option A** (federated credentials). Options B and C are simpler — see their dedicated sections ([4B](#step-4b-workload-identity--projected-service-account-tokens-no-app-registration), [4C](#imds-direct-authentication)).
+> The diagram and "How It Works" below describe **Option A** (federated credentials). Options B and C are simpler — each has its own flow diagram in its dedicated section ([4B](#step-4b-workload-identity--projected-service-account-tokens-no-app-registration), [4C](#imds-direct-authentication)).
 
 ### 🔄 How It Works (Option A)
 
@@ -499,10 +499,40 @@ This is the simplest and most scalable option. The kubelet projects the pulling 
 
 **Flow Overview:**
 
+```mermaid
+sequenceDiagram
+    participant Pod as Pod<br/>(serviceAccountName)
+    participant Kubelet
+    participant API as Kubernetes API server<br/>(cluster OIDC issuer)
+    participant Plugin as Credential Provider
+    participant Artifactory as JFrog Artifactory
+
+    Pod->>Kubelet: Request image pull
+    Note over Kubelet: Image matches matchImages<br/>and pod SA has JFrogExchange annotation<br/>(otherwise plugin is not invoked)
+    alt Credentials cached for this service account + registry
+        Note over Kubelet: Reuse cached credentials<br/>(cacheType: ServiceAccount,<br/>defaultCacheDuration)
+    else Cache miss
+        Kubelet->>API: TokenRequest for pod's SA<br/>(audience = azure_app_audience)
+        Note over API: Node must be authorized for this audience<br/>(request-serviceaccounts-token-audience)
+        API-->>Kubelet: Projected SA token (JWT)<br/>iss = cluster issuer<br/>sub = system:serviceaccount:ns:sa
+        Kubelet->>Plugin: CredentialProviderRequest<br/>(image, SA token, SA annotations)
+        Plugin->>Artifactory: POST /access/api/v1/oidc/token<br/>(provider_name, SA token)
+        Note over Artifactory: Verifies signature via issuer JWKS<br/>Matches identity mapping (iss, sub, aud)<br/>Issues token for mapped user
+        Artifactory-->>Plugin: Short-lived access token + username
+        Plugin-->>Kubelet: CredentialProviderResponse (username, token)
+    end
+    Kubelet->>Artifactory: Pull image using credentials
+    Note over Artifactory: Repository permissions of the<br/>mapped user decide 200 vs 403
+    Artifactory-->>Kubelet: Image data
+    Kubelet-->>Pod: Image available
+```
+
 1. The kubelet projects a service account token for the pulling pod's Service Account (issued by the cluster's OIDC issuer).
 2. The credential provider sends that projected token **directly** to Artifactory — there is no Azure AD or app registration involved.
 3. Artifactory validates the token claims (`iss` = cluster OIDC issuer, `sub` = the Service Account) and returns a short-lived registry access token.
 4. The kubelet uses the registry token to pull the container image.
+
+> **⚠️ Custom audience:** The chart's ClusterRole authorizes nodes (`system:nodes`) to request tokens only for `api://AzureADTokenExchange`. If you set `azure_app_audience` to anything else (for example `jfrog-artifactory`), add a matching `request-serviceaccounts-token-audience` rule under `rbac.role.additionalRules`. The DaemonSet also does not restart on ConfigMap changes, so after `helm upgrade`, restart it (`kubectl -n jfrog rollout restart daemonset/<name>`) to rewrite the kubelet config on each node.
 
 > **ℹ️ What you do *not* need for this flow:** an Azure AD app registration, a federated identity credential, `azure_app_client_id`, or the `azure.workload.identity/client-id` annotation. The only Service Account annotation required is `JFrogExchange: "true"`.
 
@@ -616,7 +646,7 @@ curl -X POST "https://$ARTIFACTORY_URL/access/api/v1/oidc/aks-workload-identity/
 
 **Option C** uses the AKS nodepool's user-assigned managed identity to request an **app-scoped access token directly from Azure IMDS** and sends that token straight to Artifactory. Unlike Option A, it does **not** perform a client-assertion exchange against the Azure AD token endpoint, so it does **not** require a federated identity credential on the app registration.
 
-Because Azure limits the number of federated identity credentials per app registration, Options A and B can become a scaling bottleneck across many clusters/nodepools. IMDS Direct removes that limit entirely — a single app registration can serve any number of nodepools.
+Because Azure limits the number of federated identity credentials per app registration, Option A can become a scaling bottleneck across many clusters/nodepools. IMDS Direct removes that limit entirely — a single app registration can serve any number of nodepools.
 
 **Flow Overview:**
 
@@ -837,10 +867,9 @@ providerConfig:
     defaultCacheDuration: 5m
     tokenAttributes:
       enabled: true  # Enable projected token support
-      serviceAccountTokenAudience: "<app-audience>"  # the projected token's audience (e.g. api://AzureADTokenExchange)
     azure:
       enabled: true
-      azure_app_audience: "<app-audience>"   # must match serviceAccountTokenAudience above
+      azure_app_audience: "<app-audience>"   # becomes the projected token's aud (defaults to api://AzureADTokenExchange)
       jfrog_oidc_provider_name: "<oidc-provider-name>"
       # jfrog_token_audience: "*@*"          # Optional; defaults to *@*
 

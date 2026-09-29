@@ -10,11 +10,21 @@ Legacy Entra-centric checklist content referred to pre-1.4.0 behavior; see git h
 
 ## Object taxonomy (simplified)
 
+Full inventory with cardinalities: [tomj-lab/azure-wi-object-inventory.md](./tomj-lab/azure-wi-object-inventory.md).
+
 ```mermaid
 erDiagram
     AKS_CLUSTER {
         string oidc_issuer_url
-        bool workload_identity_enabled
+    }
+    AKS_NODE {
+        string kubelet_version
+    }
+    KUBELET_CRED_PROVIDER_CONFIG {
+        string matchImages
+        string serviceAccountTokenAudience
+        string cacheType
+        string defaultCacheDuration
     }
     K8S_NAMESPACE {
         string name
@@ -22,9 +32,14 @@ erDiagram
     K8S_SERVICE_ACCOUNT {
         string annot_JFrogExchange
     }
-    KUBELET_CRED_PROVIDER {
-        bool tokenProjection_enabled
-        string jfrog_oidc_provider_name
+    POD {
+        string serviceAccountName
+        string imagePullPolicy
+    }
+    PROJECTED_SA_TOKEN {
+        string iss
+        string sub
+        string aud
     }
     JFROG_OIDC_PROVIDER {
         string issuer_url
@@ -33,18 +48,55 @@ erDiagram
         string claim_iss
         string claim_sub
         string claim_aud
+        int priority
     }
     ARTIFACTORY_USER {
         string username
+        string groups
     }
+    PERMISSION_TARGET {
+        string actions
+    }
+    DOCKER_REPO {
+        string key
+    }
+    AKS_CLUSTER ||--|{ AKS_NODE : runs
+    AKS_NODE ||--|| KUBELET_CRED_PROVIDER_CONFIG : "kubelet reads"
     AKS_CLUSTER ||--o{ K8S_NAMESPACE : hosts
     K8S_NAMESPACE ||--o{ K8S_SERVICE_ACCOUNT : contains
-    JFROG_OIDC_PROVIDER }o--|| AKS_CLUSTER : issuer
-    JFROG_OIDC_PROVIDER ||--o{ JFROG_IDENTITY_MAPPING : maps
-    JFROG_IDENTITY_MAPPING }o--|| K8S_SERVICE_ACCOUNT : sub
-    JFROG_IDENTITY_MAPPING }o--|| ARTIFACTORY_USER : token_spec
-    KUBELET_CRED_PROVIDER }o--|| JFROG_OIDC_PROVIDER : name
-    K8S_SERVICE_ACCOUNT ||--o{ KUBELET_CRED_PROVIDER : JFrogExchange
+    K8S_SERVICE_ACCOUNT ||--o{ POD : "runs as"
+    AKS_NODE ||--o{ POD : schedules
+    K8S_SERVICE_ACCOUNT ||--o{ PROJECTED_SA_TOKEN : "minted per cache miss"
+    AKS_CLUSTER ||--o{ PROJECTED_SA_TOKEN : "signs (iss)"
+    JFROG_OIDC_PROVIDER }o--|| AKS_CLUSTER : "trusts issuer"
+    KUBELET_CRED_PROVIDER_CONFIG }o--|| JFROG_OIDC_PROVIDER : "provider_name"
+    JFROG_OIDC_PROVIDER ||--o{ JFROG_IDENTITY_MAPPING : contains
+    JFROG_IDENTITY_MAPPING }o--|| K8S_SERVICE_ACCOUNT : "matches sub"
+    JFROG_IDENTITY_MAPPING }o--|| ARTIFACTORY_USER : "token_spec.username"
+    ARTIFACTORY_USER }o--o{ PERMISSION_TARGET : "granted by"
+    PERMISSION_TARGET }o--|{ DOCKER_REPO : covers
+```
+
+## Evaluated pull flow (lab, 2026-09-28)
+
+```mermaid
+flowchart TD
+    A[Pod scheduled with serviceAccountName] --> P{IfNotPresent and image<br/>already on node?}
+    P -->|Yes| Z0[Container starts, no registry<br/>or identity check<br/>T7 cache gap]
+    P -->|No / Always| B{Image host matches<br/>matchImages?}
+    B -->|No| Z1[Other provider or anonymous pull]
+    B -->|Yes| C{SA has JFrogExchange<br/>annotation?}
+    C -->|No| Z2[Plugin not invoked<br/>anonymous pull → 401<br/>T4 default SA]
+    C -->|Yes| D{Credentials cached for<br/>this SA + registry?}
+    D -->|Yes, within 5m| H
+    D -->|No| E[Kubelet requests projected SA token<br/>aud = azure_app_audience]
+    E --> F[Plugin POSTs token to<br/>Artifactory /access/api/v1/oidc/token]
+    F --> G{Identity mapping matches<br/>iss + sub + aud?}
+    G -->|No| Z3[Exchange fails, plugin exits<br/>anonymous pull → 401<br/>T5 unmapped, T9 revoked]
+    G -->|Yes| H[Pull with mapped user's token]
+    H --> I{User has read on<br/>target repo?}
+    I -->|No| Z4[403 Forbidden<br/>T2, T3b, T6b]
+    I -->|Yes| J[Image pulled → Running<br/>T1, T3a, T6a]
 ```
 
 ---
@@ -63,7 +115,7 @@ erDiagram
 | Object | Requirement |
 |--------|-------------|
 | OIDC provider | `issuer_url` / `token_issuer` = AKS OIDC issuer |
-| Identity mapping | Match `iss`, `sub` (`system:serviceaccount:<ns>:<sa>`), `aud` (recommended: **`jfrog-artifactory`**, aligned with Helm `azure_app_audience`) |
+| Identity mapping | Match `iss`, `sub` (`system:serviceaccount:<ns>:<sa>`), `aud` (must equal Helm `azure_app_audience`; a dedicated value such as **`jfrog-artifactory`** needs an extra node RBAC rule and a DaemonSet restart — see [AZURE.md Step 4B](./AZURE.md#step-4b-workload-identity--projected-service-account-tokens-no-app-registration)) |
 | Artifactory user | Per team/namespace; repo permissions **without** global `readers` if testing isolation |
 | Token TTL | `expires_in` > provider `defaultCacheDuration` |
 

@@ -57,6 +57,20 @@ helm upgrade --install jfrog-cp jfrog/jfrog-credential-provider \
 
 Verify on a node: `/var/lib/kubelet/credential-provider-config.yaml` contains `tokenAttributes` with `JFrogExchange` and `cacheType: ServiceAccount`.
 
+**Changing the audience on an existing install:** the DaemonSet does not restart when its ConfigMap changes, so `helm upgrade` alone leaves the old audience on every node. For `jfrog-artifactory`, also authorize nodes for that audience (the chart's ClusterRole only covers `api://AzureADTokenExchange`):
+
+```yaml
+rbac:
+  create: true
+  role:
+    additionalRules:
+      - apiGroups: [""]
+        resources: ["jfrog-artifactory"]
+        verbs: ["request-serviceaccounts-token-audience"]
+```
+
+Then `kubectl -n jfrog rollout restart daemonset/jfrog-cp-jfrog-credential-provider-daemonset` and confirm the new audience in the injector logs (`kubectl -n jfrog logs <pod> -c jfrog-credential-provider-injector | grep serviceAccountTokenAudience`).
+
 ## 5. Workloads
 
 ```bash
@@ -79,7 +93,7 @@ For **T6**, set the same `nodeName` on `test-pod-team-a-own.yaml` and `test-pod-
 
 ## Customer claim language
 
-Validated **2026-09-28:** T1–T9 pass on live cluster (T0/T10 not run). You may claim cross-namespace **403** on shared nodes with `imagePullPolicy: Always` (T6), dedicated-audience pulls (T8), and immediate mapping revoke for new tags (T9).
+Validated **2026-09-28:** T1–T7 and T9 pass on live cluster; T8 partial (T0/T10 not run). You may claim cross-namespace **403** on shared nodes with `imagePullPolicy: Always` (T6) and immediate mapping revoke for new tags (T9). Do **not** yet claim dedicated-audience kubelet pulls (T8) — only the direct exchange was proven.
 
 **Caveats to state explicitly:**
 

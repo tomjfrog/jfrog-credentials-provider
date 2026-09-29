@@ -68,7 +68,7 @@ flowchart TD
     
     Execute --> Identity{🔐 Get Cloud Identity}
     Identity -->|AWS| AWS[🆔 AWS IAM Role or Cognito OIDC]
-    Identity -->|Azure| Azure[🔷 Azure Managed Identity]
+    Identity -->|Azure| Azure[🔷 Azure Managed Identity or Projected SA Token]
     Identity -->|GCP| GCP[🔵 GCP Service Account]
     
     AWS --> Exchange[🔄 Exchange Identity with Artifactory via OIDC/IAM Role]
@@ -94,7 +94,7 @@ flowchart TD
 1. **📦 Image Pull Request**: A new pod needs an image from Artifactory
 2. **🎯 Kubelet Interception**: The Kubelet on your worker node matches the image host with the pattern configured for the JFrog provider
 3. **⚙️ Plugin Execution**: The Kubelet executes the configured plugin binary: `jfrog-credential-provider`
-4. **🔄 Token Exchange**: The provider uses the worker node's verified cloud identity (AWS IAM Role/OIDC or Azure managed identity) and exchanges that proof of identity with Artifactory via OIDC
+4. **🔄 Token Exchange**: The provider uses the worker node's verified cloud identity (AWS IAM Role/OIDC or Azure managed identity) — or, with projected service account tokens, the pulling pod's Kubernetes Service Account token — and exchanges that proof of identity with Artifactory via OIDC
 5. **🎫 Short-Lived Token**: Artifactory returns a newly generated, short-lived token intended for registry authentication
 6. **✅ Image Pull**: The Kubelet uses the temporary token to securely pull the image and complete the deployment
 

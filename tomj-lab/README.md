@@ -8,13 +8,14 @@ Product docs: [AZURE.md](../AZURE.md), [AWS.md](../AWS.md), [README.md](../READM
 
 ## Azure Workload Identity isolation (canonical, 1.4.0 Option B)
 
-Validated **2026-09-28** on `tomj-k8s-cluster` + `tomjpd2.jfrog.io`: projected service account tokens with **`JFrogExchange` only** (no Entra app), Artifactory OIDC on the **AKS cluster issuer**, identity mappings on **`sub`** → per-team Artifactory users and Docker repos. Cross-repo **403**, same-node **403** with `imagePullPolicy: Always`, audience **`jfrog-artifactory`**, mapping revoke on new tags. Caveats: global **`readers`** group, node cache (`IfNotPresent`), 5m credential cache not fully timed for revoke.
+Validated **2026-09-28** on `tomj-k8s-cluster` + `tomjpd2.jfrog.io`: projected service account tokens with **`JFrogExchange` only** (no Entra app), Artifactory OIDC on the **AKS cluster issuer**, identity mappings on **`sub`** → per-team Artifactory users and Docker repos. Cross-repo **403**, same-node **403** with `imagePullPolicy: Always`, mapping revoke on new tags. Audience **`jfrog-artifactory`** proven at the Artifactory exchange only (kubelet still on `api://AzureADTokenExchange` — see evidence T8). Caveats: global **`readers`** group, node cache (`IfNotPresent`), 5m credential cache not fully timed for revoke.
 
 | Path | Purpose |
 |------|---------|
 | [azure-wi-isolation-lab.md](./azure-wi-isolation-lab.md) | **Primary runbook** |
 | [azure-wi-isolation-evidence.md](./azure-wi-isolation-evidence.md) | Test matrix + evidence |
 | [azure-wi-customer-summary.md](./azure-wi-customer-summary.md) | Customer / deck summary |
+| [azure-wi-object-inventory.md](./azure-wi-object-inventory.md) | Object inventory, roles, relationships, cardinality |
 | [Azure-Workload-Identity-OIDC-Workflow-Checklist.md](../Azure-Workload-Identity-OIDC-Workflow-Checklist.md) | Stakeholder checklist |
 | [azure-env-secrets.sh.example](../azure-env-secrets.sh.example) | Env template (copy to `azure-env-secrets.sh` at repo root) |
 | [examples/azure-projected-sa-values-tomjpd2-jfrog-audience.yaml](./examples/azure-projected-sa-values-tomjpd2-jfrog-audience.yaml) | **Current** Helm values (`jfrog-artifactory` aud) |

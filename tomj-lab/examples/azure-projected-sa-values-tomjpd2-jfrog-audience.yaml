@@ -14,5 +14,11 @@ providerConfig:
 
 rbac:
   create: true
+  role:
+    # Chart ClusterRole only authorizes api://AzureADTokenExchange; nodes need this for a custom audience.
+    additionalRules:
+      - apiGroups: [""]
+        resources: ["jfrog-artifactory"]
+        verbs: ["request-serviceaccounts-token-audience"]
 
 logLevel: debug

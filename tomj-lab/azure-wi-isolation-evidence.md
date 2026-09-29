@@ -2,7 +2,7 @@
 
 **Hypothesis:** Per-namespace image pull isolation via projected SA tokens → JFrog OIDC (Option B, chart 1.4.0).
 
-**Gate:** T1–T9 **pass** on live cluster (2026-09-28). **T0** and **T10** not run (provider was already installed; RBAC demo deferred).
+**Gate:** T1–T7 and T9 **pass** on live cluster (2026-09-28); T8 **partial** (Artifactory side only, see matrix). **T0** and **T10** not run (provider was already installed; RBAC demo deferred).
 
 ## Environment
 
@@ -13,7 +13,7 @@
 | AKS cluster | tomj-k8s-cluster / tomj-jfrog-credentials-provider-lab-rg | Yes (2026-09-28) |
 | Control plane / nodes | 1.35.1 / 1.34.4 | Yes |
 | OIDC issuer | `https://centralus.oic.prod-aks.azure.com/ad8b5a8c-9862-4c41-a341-aa838fc564df/16d7b4c6-03c2-40d9-a137-354bd22d8bb6/` | Matches env file; discovery OK |
-| Helm `jfrog-cp` | 1.4.0, 2/2 DaemonSet; rev 2 for T8 (`jfrog-artifactory` aud) | Yes |
+| Helm `jfrog-cp` | 1.4.0, 2/2 DaemonSet; rev 2 sets `jfrog-artifactory` aud in values/ConfigMap | Values yes; **nodes still on rev 1 audience** (`api://AzureADTokenExchange`) — DaemonSet not restarted |
 
 ## Phase 2 — Artifactory (no Kubernetes)
 
@@ -62,8 +62,8 @@
 | T6a | Pull OK | **Pull OK** | Same node |
 | T6b | Fail 403 | **403 Forbidden** | **Not a blocker** — no registry cache leak |
 | T7 | Cache gap | **already present on machine** | IfNotPresent, no pull |
-| T8 | aud `jfrog-artifactory` | **PASS** | Helm rev 2; mappings `mapping-*-jfrog-aud`; T1 **Running**; T2 **403**; direct exchange **200** with `jfrog-artifactory` aud |
-| T8 note | Legacy aud | **200** if priority-10 `api://AzureADTokenExchange` mappings remain | Remove legacy mappings for strict aud-only |
+| T8 | aud `jfrog-artifactory` | **PARTIAL** — direct exchange only | Direct exchange (`kubectl create token --audience jfrog-artifactory`) **200** via `mapping-*-jfrog-aud`. **Kubelet path not validated:** Helm rev 2 updated the ConfigMap (15:21Z) but DaemonSet pods (started 15:07Z) were never restarted, so both nodes still request `aud: api://AzureADTokenExchange`. T1 **Running** after rev 2 was served by the legacy priority-10 mapping. |
+| T8 note | Legacy aud | Legacy `mapping-team-b-artifactory-pull` still present (re-checked 2026-09-28) | Before re-running: add node RBAC rule for `jfrog-artifactory` (chart ClusterRole only grants `api://AzureADTokenExchange`), `rollout restart` the DaemonSet, delete legacy mappings |
 | T9 | Revoke mapping | **PASS (immediate)** | Delete team-a mappings: exchange **403**; new tag `wi-lab-t9-amd64` pull **401** (no anon). Re-pull of cached creds within `defaultCacheDuration` may still succeed — not measured to 5m |
 | T10 | RBAC | **NOT RUN** | |
 
